@@ -139,8 +139,24 @@ asignación individual entre los tres integrantes.
 ## Desarrollo local — Fase 1
 
 Requisitos observados en el entorno: Python 3.14, Node.js 24, Docker Compose y
-`psql`. `uv` y Bun se instalan en el perfil del usuario. PostgreSQL corre en
-Docker y escucha solo en `127.0.0.1:55432` (5432 y 5433 ya están ocupados).
+`psql`. `uv` y Bun se instalan en el perfil del usuario. Makefile requiere GNU
+Make y Docker Compose v2.17 o posterior. PostgreSQL corre en Docker y escucha
+solo en `127.0.0.1:55432` (5432 y 5433 ya están ocupados).
+
+Para preparar el entorno, configurar `.env`, crear el administrador principal
+(una vez por base local) y levantar API, frontend y PostgreSQL juntos:
+
+```sh
+make setup
+# Configurar INITIAL_ADMIN_PASSWORD en .env antes del siguiente comando.
+make principal
+make dev
+```
+
+`make dev` aplica migraciones pendientes antes de iniciar las aplicaciones. Al
+presionar Ctrl+C, termina ambos servidores de aplicación y ejecuta
+`docker compose down`, conservando el volumen de datos. La creación de la cuenta
+principal nunca se ejecuta automáticamente al iniciar los servidores.
 
 ```sh
 cp .env.example .env
@@ -247,3 +263,10 @@ uv run ruff check app migrations
   avisos existentes de comentarios Zod y el aviso de tamaño del bundle. No se
   ejecutaron pruebas funcionales; la aprobación administrativa de notas sigue
   pendiente y no fue implementada.
+- **Arranque local con Make (19-11-2026):** se añadieron `make setup`,
+  `make principal` y `make dev`. El último espera PostgreSQL saludable, aplica
+  migraciones y administra backend/frontend en conjunto; Ctrl+C detiene esos
+  procesos y PostgreSQL sin borrar su volumen. La contraseña de la cuenta
+  inicial permanece fuera de Git. Ruff y la compilación de sintaxis Python
+  aprobaron; `make -n setup principal dev` revisó los objetivos. No se ejecutó
+  el arranque completo ni pruebas funcionales de esta mejora.

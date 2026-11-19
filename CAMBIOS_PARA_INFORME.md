@@ -338,3 +338,16 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   de decisión y no se implementó.
 - **Secciones del informe a revisar:** RN09, HU14, P07, modelo conceptual,
   navegación y capturas de planificación, oferta y habilitaciones.
+
+## Arranque local con Make
+
+- Se añadió un `Makefile` con `make setup`, `make principal` y `make dev` para
+  preparar dependencias, crear una vez el administrador inicial y levantar
+  PostgreSQL, migraciones, API y frontend con un comando.
+- `make dev` cierra los procesos de backend/frontend y detiene PostgreSQL con
+  `docker compose down` al presionar Ctrl+C, sin borrar el volumen local. La
+  contraseña de administrador sigue configurándose en `.env`, excluido de Git.
+- Ruff, sintaxis Python y `make -n` aprobaron. No se levantaron los servicios ni
+  se ejecutaron pruebas funcionales en esta actualización.
+- **Secciones del informe a revisar:** ejecución local y reproducibilidad del
+  entorno de desarrollo.

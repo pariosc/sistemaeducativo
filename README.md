@@ -11,42 +11,45 @@ El contexto funcional y los diagramas vigentes están en
 
 ## Ejecución local
 
-Requisitos para desarrollo local: Docker Compose, Python 3.14 con `uv`, Node.js
-24 y Bun. Desde la raíz del proyecto:
+Requisitos para desarrollo local: GNU Make, Docker Compose v2.17 o posterior,
+Python 3.14 con `uv`, Node.js 24 y Bun. Los comandos Make se ejecutan desde la
+raíz del proyecto y están pensados para Linux/macOS (en Windows, usa WSL).
+
+Prepara el entorno e instala las dependencias:
 
 ```sh
-cp .env.example .env
+make setup
 ```
 
-Antes de crear la cuenta inicial, define una contraseña propia de al menos ocho
-caracteres en `INITIAL_ADMIN_PASSWORD` dentro de `.env`. No la guardes en Git.
-
-Inicia PostgreSQL y prepara el backend:
+`make setup` crea `.env` con permisos restringidos solo si aún no existe y
+prepara las dependencias de backend y frontend. Antes de crear la cuenta inicial,
+define una contraseña propia de al menos ocho caracteres en
+`INITIAL_ADMIN_PASSWORD` dentro de `.env`. No la guardes en Git.
 
 ```sh
-docker compose up -d db
-cd backend
-uv sync --all-groups
-uv run alembic upgrade head
-uv run python -m app.cli create-principal
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8100
+make principal
 ```
 
-En otra terminal, desde la raíz del proyecto:
+`make principal` inicia PostgreSQL, aplica las migraciones y crea el administrador
+principal. Ejecuta este comando una sola vez por base local. Después, inicia los
+tres servidores con:
 
 ```sh
-cd frontend
-bun install
-bun run dev
+make dev
 ```
 
-La interfaz queda en `http://127.0.0.1:5173`; la API y su documentación OpenAPI
-en `http://127.0.0.1:8100/docs`. PostgreSQL se publica solo en
-`127.0.0.1:55432`. Los valores de `.env.example` son únicamente para desarrollo
-local. La puesta en producción requiere definir infraestructura, secretos,
-dominio y HTTPS; no está configurada en este repositorio.
+`make dev` espera que PostgreSQL esté saludable, aplica migraciones pendientes,
+y levanta el backend y frontend a la vez. La interfaz queda en
+`http://127.0.0.1:5173`; la API y su documentación OpenAPI, en
+`http://127.0.0.1:8100/docs`. PostgreSQL se publica solo en
+`127.0.0.1:55432`. Presiona `Ctrl+C` para detener la aplicación y PostgreSQL;
+los datos se conservan en el volumen de Docker.
 
-Para detener la base local sin borrar sus datos:
+Los valores de `.env.example` son únicamente para desarrollo local. La puesta
+en producción requiere definir infraestructura, secretos, dominio y HTTPS; no
+está configurada en este repositorio.
+
+Si PostgreSQL se inició aparte y deseas detenerlo sin borrar sus datos:
 
 ```sh
 docker compose down
