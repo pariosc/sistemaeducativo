@@ -138,6 +138,27 @@ asignación individual entre los tres integrantes.
 
 ## Desarrollo local — Fase 1
 
+### Windows (equipo nuevo)
+
+La ruta de desarrollo Windows es PowerShell nativo con Docker Desktop usando
+WSL 2; no requiere Make ni desarrollar dentro de una distribución Linux. En
+una computadora virgen, instalar WinGet/App Installer si falta, instalar Git,
+clonar el repositorio y ejecutar `scripts/setup-windows.ps1` como
+administrador. El script instala/verifica Git, uv, Bun, Docker Desktop y Visual
+Studio Code mediante WinGet; descarga la última versión estable Node.js 24.x
+desde el sitio oficial y valida su SHA-256. Instala Python 3.14 administrado
+por uv, prepara dependencias y crea `.env` solo si falta. Si habilitar WSL
+requiere reinicio, completarlo y volver a ejecutar el script. Después iniciar Docker Desktop,
+configurar `INITIAL_ADMIN_PASSWORD`, ejecutar una vez
+`scripts/principal-windows.ps1` y levantar con `scripts/dev-windows.ps1`.
+Ctrl+C cierra los procesos de aplicación y ejecuta `docker compose down`, que
+conserva el volumen PostgreSQL.
+
+Requisitos prácticos: Windows 11 23H2 o posterior de 64 bits recomendado,
+virtualización de hardware habilitada y al menos 8 GB de RAM para Docker Desktop/WSL 2. WinGet se
+distribuye mediante App Installer. La instalación inicial/clonado requieren
+Internet y acceso GitHub de cada integrante. No distribuir `.env`.
+
 Requisitos observados en el entorno: Python 3.14, Node.js 24, Docker Compose y
 `psql`. `uv` y Bun se instalan en el perfil del usuario. Makefile requiere GNU
 Make y Docker Compose v2.17 o posterior. PostgreSQL corre en Docker y escucha
@@ -199,6 +220,13 @@ uv run ruff check app migrations
 ```
 
 ### Registro de avance
+
+- **Entorno Windows para desarrollo (20-11-2026):** se añadieron scripts
+  PowerShell para preparar herramientas/dependencias, crear manualmente el
+  administrador principal y levantar los servicios juntos. README y esta guía
+  explican instalación en una máquina Windows nueva, WSL 2/Docker Desktop,
+  reinicio, `.env` y puertos locales. Falta ejecutar los scripts en Windows
+  real; el entorno actual no es Windows.
 
 - **Fase 1 — implementada y verificada localmente (17-11-2026):** API de
   autenticación, sesiones revocables, perfiles y administración de usuarios;

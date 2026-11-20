@@ -1,5 +1,17 @@
 # Cambios para reflejar en el informe
 
+## Entorno de desarrollo en Windows
+
+- Se documentó el proceso para preparar una computadora Windows nueva:
+  instalar Git y clonar el repositorio, habilitar WSL 2, instalar herramientas
+  con WinGet, preparar Python 3.14 y dependencias, configurar `.env`, crear el
+  administrador inicial y levantar PostgreSQL, API y frontend desde PowerShell.
+- La secuencia utiliza Docker Desktop con WSL 2 y conserva los datos locales al
+  detener los servicios. Debe verificarse en Windows real antes de afirmar que
+  fue probada.
+- **Secciones del informe a revisar:** requisitos de software y hardware,
+  instalación, configuración y ejecución del entorno de desarrollo.
+
 Bitácora de decisiones e implementación. Antes de la entrega, trasladar los
 cambios confirmados al informe académico y verificar que coincidan con el
 sistema final. Las propuestas y los pendientes están separados de lo ya
