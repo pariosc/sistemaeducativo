@@ -1,0 +1,176 @@
+/* =====================================================================
+   SISTEMA DE DISEÑO · Gestión Académica (v2)
+   Alcance: todo lo que cuelga de un contenedor `.cx` (área Currículo).
+   Colores verificados contra WCAG 2.2 AA (texto 4.5:1, componentes 3:1).
+
+   Lenguaje de color (semántica):
+     VERDE  → confirmar / crear / guardar / publicar / activo
+     ROJO   → eliminar / retirar (acciones destructivas)
+     ÁMBAR  → borrador / inactivar / precaución
+     AZUL   → marca, navegación, foco y elementos informativos
+     GRIS   → acciones neutras (cancelar, editar, ver) e inactivo
+   ===================================================================== */
+
+.cx {
+  --cx-font-display: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; /* cámbialo aquí si instalas otra fuente de títulos */
+  --cx-ink: #1b2540;
+  --cx-muted: #526079;
+  --cx-line: #dbe3f0;
+  --cx-line-strong: #7d889e;
+  --cx-surface: #fff;
+  --cx-canvas: #f5f7fb;
+  --cx-brand: #2857c5;
+  --cx-brand-dark: #173d9b;
+  --cx-brand-soft: #eaf0ff;
+  --cx-green: #15803d;
+  --cx-green-hover: #116b33;
+  --cx-green-soft: #ddf3e4;
+  --cx-green-ink: #0f5d2e;
+  --cx-red: #b91c1c;
+  --cx-red-hover: #991b1b;
+  --cx-red-soft: #fdeaea;
+  --cx-red-ink: #7f1d1d;
+  --cx-amber: #b45309;
+  --cx-amber-ink: #8a4b04;
+  --cx-amber-soft: #fff1c9;
+  --cx-gray-soft: #e9edf3;
+  --cx-gray-ink: #3d485e;
+  --cx-focus: #173d9b;
+  --cx-radius: 14px;
+  --cx-shadow: 0 1px 2px rgb(27 37 64 / 6%), 0 4px 14px rgb(27 37 64 / 5%);
+  color: var(--cx-ink);
+}
+
+/* ---------- Escala tipográfica (h1 → h4) ---------- */
+.content-wrap.cx h1 { margin: 0; font-family: var(--cx-font-display); font-size: clamp(28px, 3.2vw, 36px); font-weight: 800; line-height: 1.12; letter-spacing: -.035em; color: var(--cx-ink); }
+.content-wrap.cx h2 { margin: 0; font-family: var(--cx-font-display); font-size: 22px; font-weight: 750; line-height: 1.25; letter-spacing: -.02em; color: var(--cx-ink); }
+.content-wrap.cx h3 { margin: 0; font-family: var(--cx-font-display); font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; color: var(--cx-ink); }
+.content-wrap.cx h4 { margin: 0; font-size: 12px; font-weight: 800; line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; color: var(--cx-muted); }
+.cx .ui-heading-focus:focus { outline: none; }
+.cx .ui-eyebrow { display: block; margin-bottom: 8px; color: var(--cx-brand); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.cx .ui-lead { max-width: 66ch; margin: 10px 0 0; color: var(--cx-muted); font-size: 16px; line-height: 1.6; }
+.cx .ui-text-muted { color: var(--cx-muted); }
+
+.cx .ui-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.cx .ui-icon { flex: none; }
+
+/* ---------- Encabezado de página ---------- */
+.cx .ui-page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px 28px; margin-bottom: 26px; }
+.cx .ui-page-header-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ---------- Tarjeta contenedora ---------- */
+.cx .ui-card { border: 1px solid var(--cx-line); border-radius: var(--cx-radius); background: var(--cx-surface); box-shadow: var(--cx-shadow); }
+
+/* ---------- Botones (color = significado) ---------- */
+.cx .ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 18px;
+  border: 1.5px solid transparent; border-radius: 10px; font-size: 15px; font-weight: 650; line-height: 1.2; text-align: center; text-decoration: none; cursor: pointer;
+  transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+.cx .ui-btn:disabled { cursor: not-allowed; opacity: .6; }
+.cx .ui-btn-primary { background: var(--cx-green); color: #fff; box-shadow: 0 1px 2px rgb(21 128 61 / 30%); }
+.cx .ui-btn-primary:hover:not(:disabled) { background: var(--cx-green-hover); }
+.cx .ui-btn-secondary { background: #fff; color: var(--cx-ink); border-color: var(--cx-line-strong); }
+.cx .ui-btn-secondary:hover:not(:disabled) { background: #f0f4fb; border-color: #4a5671; }
+.cx .ui-btn-danger { background: var(--cx-red); color: #fff; box-shadow: 0 1px 2px rgb(185 28 28 / 30%); }
+.cx .ui-btn-danger:hover:not(:disabled) { background: var(--cx-red-hover); }
+.cx .ui-btn-danger-outline { background: #fff; color: var(--cx-red); border-color: var(--cx-red); }
+.cx .ui-btn-danger-outline:hover:not(:disabled) { background: var(--cx-red-soft); }
+.cx .ui-btn-warning { background: #fff; color: var(--cx-amber-ink); border-color: var(--cx-amber); }
+.cx .ui-btn-warning:hover:not(:disabled) { background: var(--cx-amber-soft); }
+.cx .ui-btn-success-outline { background: #fff; color: var(--cx-green-ink); border-color: var(--cx-green); }
+.cx .ui-btn-success-outline:hover:not(:disabled) { background: var(--cx-green-soft); }
+.cx .ui-btn-quiet { min-height: 36px; padding: 6px 12px; background: transparent; color: var(--cx-brand-dark); font-size: 14px; }
+.cx .ui-btn-quiet:hover:not(:disabled) { background: var(--cx-brand-soft); }
+.cx .ui-btn-quiet-danger { color: var(--cx-red); }
+.cx .ui-btn-quiet-danger:hover:not(:disabled) { background: var(--cx-red-soft); }
+.cx .ui-btn-sm { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+
+.cx .ui-icon-button { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--cx-muted); font-size: 26px; line-height: 1; }
+.cx .ui-icon-button:hover:not(:disabled) { background: var(--cx-gray-soft); color: var(--cx-ink); }
+
+/* Foco visible, de alto contraste y no tapado (WCAG 2.4.7, 2.4.11, 1.4.11) */
+.cx :is(.ui-btn, .ui-icon-button, .ui-tab, .ui-tabpanel, .ui-chip-remove, .ui-input, .ui-select, .ui-nav-link, .ui-link-button, .kb-card, .kb-add, .kb-board):focus-visible {
+  outline: 3px solid var(--cx-focus); outline-offset: 2px;
+}
+
+/* ---------- Campos ---------- */
+.cx .ui-field { display: grid; gap: 6px; }
+.cx .ui-field > label { font-size: 14px; font-weight: 650; }
+.cx .ui-field-hint { margin: 0; color: var(--cx-muted); font-size: 13px; line-height: 1.5; }
+.cx .ui-input, .cx .ui-select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1.5px solid var(--cx-line-strong); border-radius: 10px; background: #fff; color: var(--cx-ink); font-size: 15px; }
+.cx .ui-input::placeholder { color: #5d6778; }
+.cx .ui-fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.cx .ui-fieldset > legend { margin-bottom: 8px; padding: 0; font-size: 14px; font-weight: 650; }
+.cx .ui-choice { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 2px 12px; padding: 12px 14px; border: 1.5px solid var(--cx-line-strong); border-radius: 12px; cursor: pointer; }
+.cx .ui-choice input { grid-row: 1 / span 2; width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--cx-green); }
+.cx .ui-choice strong { font-size: 15px; }
+.cx .ui-choice span { grid-column: 2; color: var(--cx-muted); font-size: 13px; line-height: 1.5; }
+.cx .ui-choice:has(input:checked) { border-color: var(--cx-green); background: #f1faf4; box-shadow: inset 0 0 0 1px var(--cx-green); }
+.cx .ui-choice:has(input:focus-visible) { outline: 3px solid var(--cx-focus); outline-offset: 2px; }
+
+/* ---------- Avisos ---------- */
+.cx .ui-alert { margin: 0 0 18px; padding: 13px 16px; border: 1px solid; border-left-width: 5px; border-radius: 10px; font-size: 14px; line-height: 1.55; }
+.cx .ui-alert-flush { margin: 0; }
+.cx .ui-alert-error { background: var(--cx-red-soft); border-color: #e6a3a3; color: var(--cx-red-ink); }
+.cx .ui-alert-success { background: #e9f7ee; border-color: #8fd1a8; color: var(--cx-green-ink); }
+.cx .ui-alert-warning { background: #fff8e1; border-color: #e8c35e; color: #5f4a0a; }
+.cx .ui-alert-info { background: var(--cx-brand-soft); border-color: #9db6ec; color: #1e3a6e; }
+
+/* ---------- Etiquetas de estado (texto + punto + color) ---------- */
+.cx .ui-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 100px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.cx .ui-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.cx .ui-badge-green { background: var(--cx-green-soft); color: var(--cx-green-ink); }
+.cx .ui-badge-amber { background: var(--cx-amber-soft); color: #7a4b00; }
+.cx .ui-badge-gray { background: var(--cx-gray-soft); color: var(--cx-gray-ink); }
+.cx .ui-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; padding: 2px 8px; border-radius: 100px; background: var(--cx-gray-soft); color: var(--cx-gray-ink); font-size: 12px; font-weight: 800; }
+
+/* ---------- Pestañas ---------- */
+.cx .ui-tabs { display: flex; gap: 4px; margin-top: 26px; border-bottom: 2px solid var(--cx-line); overflow-x: auto; }
+.cx .ui-tab { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 46px; margin-bottom: -2px; padding: 10px 18px; border: 0; border-bottom: 3px solid transparent; border-radius: 10px 10px 0 0; background: transparent; color: var(--cx-muted); font-size: 15px; font-weight: 700; }
+.cx .ui-tab:hover { background: #eef2fa; color: var(--cx-ink); }
+.cx .ui-tab[aria-selected="true"] { border-bottom-color: var(--cx-brand); background: var(--cx-brand-soft); color: var(--cx-brand-dark); }
+.cx .ui-tabpanel { padding-top: 26px; }
+
+/* ---------- Chips ---------- */
+.cx .ui-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 12px; border: 1px solid #b4bfd3; border-radius: 100px; background: #f4f6fa; font-size: 13px; font-weight: 650; }
+.cx .ui-chip-static { padding-right: 12px; }
+.cx .ui-chip-remove { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--cx-red); font-size: 18px; line-height: 1; }
+.cx .ui-chip-remove:hover { background: var(--cx-red-soft); }
+
+/* ---------- Estado vacío ---------- */
+.cx .ui-empty { display: grid; justify-items: center; gap: 10px; padding: 44px 24px; border: 2px dashed #b4bfd3; border-radius: var(--cx-radius); background: #fff; text-align: center; }
+.cx .ui-empty-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--cx-brand-soft); color: var(--cx-brand-dark); }
+.cx .ui-empty p { max-width: 52ch; margin: 0; color: var(--cx-muted); font-size: 15px; line-height: 1.6; }
+
+/* ---------- Tabla ---------- */
+.cx .ui-table-wrap { overflow-x: auto; }
+.cx .ui-table { width: 100%; min-width: 680px; border-collapse: collapse; text-align: left; }
+.cx .ui-table th { padding: 13px 20px; border-bottom: 2px solid var(--cx-line); background: #f3f6fb; color: var(--cx-muted); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.cx .ui-table td { padding: 15px 20px; border-bottom: 1px solid #e8edf5; font-size: 15px; vertical-align: middle; }
+.cx .ui-table tbody tr:last-child td { border-bottom: 0; }
+.cx .ui-table tbody tr:hover td { background: #f8faff; }
+.cx .ui-table .ui-cell-strong { font-weight: 750; }
+.cx .ui-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- Ventana modal ---------- */
+.cx .ui-modal { width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 0; border-top: 5px solid var(--cx-green); border-radius: 18px; background: #fff; color: var(--cx-ink); box-shadow: 0 28px 70px rgb(15 23 42 / 38%); }
+.cx .ui-modal--danger { border-top-color: var(--cx-red); }
+.ui-modal::backdrop { background: rgb(15 23 42 / 58%); }
+.cx .ui-modal-body { display: grid; gap: 18px; padding: 26px; }
+.cx .ui-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cx .ui-modal-header h2 { font-size: 21px; }
+.cx .ui-modal-description { margin: 0; color: var(--cx-muted); font-size: 14.5px; line-height: 1.6; }
+.cx .ui-modal form { display: grid; gap: 18px; }
+.cx .ui-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+body:has(dialog.ui-modal[open]) { overflow: hidden; }
+
+@media (max-width: 560px) {
+  .cx .ui-modal-body { padding: 20px; }
+  .cx .ui-modal-actions .ui-btn { flex: 1 1 auto; }
+  .cx .ui-page-header-actions { width: 100%; }
+  .cx .ui-page-header-actions .ui-btn { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx .ui-btn { transition: none; }
+}

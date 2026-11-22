@@ -1,0 +1,101 @@
+/* Planes de estudio: lista de planes, cabecera de plan y malla curricular tipo Kanban. */
+
+.cx [data-state="BORRADOR"] { --state-accent: #d99a1c; }
+.cx [data-state="VIGENTE"] { --state-accent: #2f9e5a; }
+.cx [data-state="INACTIVO"] { --state-accent: #8a96ab; }
+
+/* ---------- Filtros y lista de planes (tarjetas) ---------- */
+.cx .plan-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 220px; gap: 12px; margin-bottom: 16px; }
+.cx .plan-count { margin: 0 0 12px; color: var(--cx-muted); font-size: 14px; }
+.cx .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin: 0; padding: 0; list-style: none; }
+.cx .plan-grid > li { display: flex; }
+.cx .plan-card { display: grid; align-content: start; gap: 12px; width: 100%; padding: 22px; border: 1px solid var(--cx-line); border-top: 6px solid var(--state-accent); border-radius: var(--cx-radius); background: #fff; box-shadow: var(--cx-shadow); transition: box-shadow .15s; }
+.cx .plan-card:hover { box-shadow: 0 8px 24px rgb(27 37 64 / 13%); }
+.cx .plan-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cx .plan-card-mod { color: var(--cx-muted); font-size: 13px; font-weight: 700; }
+.cx .plan-card h3 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.cx .plan-card-career { margin: -6px 0 0; color: var(--cx-muted); font-size: 14.5px; line-height: 1.45; }
+.cx .plan-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0; }
+.cx .plan-card-stats div { padding: 9px 6px; border-radius: 10px; background: #f3f6fb; text-align: center; }
+.cx .plan-card-stats dt { color: var(--cx-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.cx .plan-card-stats dd { margin: 1px 0 0; font-size: 20px; font-weight: 800; }
+
+/* ---------- Ruta y cabecera del plan ---------- */
+.cx .plan-breadcrumb ol { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; color: var(--cx-muted); font-size: 14px; }
+.cx .plan-breadcrumb li + li::before { content: "/"; margin-right: 8px; color: var(--cx-line-strong); }
+.cx .plan-breadcrumb .ui-link-button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px; border: 0; background: none; color: var(--cx-brand-dark); font-size: 14px; font-weight: 700; text-decoration: underline; }
+
+.cx .plan-hero { display: grid; grid-template-columns: 1fr auto; gap: 22px 32px; align-items: center; padding: 28px 30px; border: 1px solid var(--cx-line); border-left: 8px solid var(--state-accent); border-radius: var(--cx-radius); background: #fff; box-shadow: var(--cx-shadow); }
+.cx .plan-hero-main { display: grid; gap: 10px; justify-items: start; }
+.cx .plan-hero-sub { margin: 0; color: var(--cx-muted); font-size: 16px; line-height: 1.5; }
+.cx .plan-stats { display: flex; gap: 12px; margin: 0; }
+.cx .plan-stats div { min-width: 108px; padding: 12px 16px; border-radius: 12px; background: #f3f6fb; text-align: center; }
+.cx .plan-stats dt { color: var(--cx-muted); font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.cx .plan-stats dd { margin: 2px 0 0; font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.cx .plan-hero-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid var(--cx-line); }
+
+.cx .plan-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.cx .plan-lead { max-width: 76ch; margin: 0 0 18px; color: var(--cx-muted); font-size: 15px; line-height: 1.6; }
+
+/* ---------- Malla tipo Kanban ---------- */
+.cx .kb-scroll { margin: 0 -2px; padding: 4px 2px 20px; overflow-x: auto; border-radius: var(--cx-radius); scroll-snap-type: x proximity; }
+.cx .kb-board { display: flex; align-items: flex-start; gap: 16px; width: max-content; min-width: 100%; margin: 0; padding: 0; list-style: none; }
+
+.cx .kb-col { --accent: #3b6fd8; --pastel: #e6eeff; --pastel-line: #b9cdf7;
+  flex: 0 0 292px; display: grid; gap: 12px; padding: 14px; border: 1px solid #d3dbea; border-top: 6px solid var(--accent); border-radius: 16px; background: #edf1f8; scroll-snap-align: start; }
+.cx .kb-col[data-tone="1"] { --accent: #2f9e5a; --pastel: #e1f4e8; --pastel-line: #aedbbd; }
+.cx .kb-col[data-tone="2"] { --accent: #d99a1c; --pastel: #fff1cf; --pastel-line: #f0d08a; }
+.cx .kb-col[data-tone="3"] { --accent: #7c5ad6; --pastel: #ece6ff; --pastel-line: #cfc0f5; }
+.cx .kb-col[data-tone="4"] { --accent: #d9577a; --pastel: #ffe6ee; --pastel-line: #f4bccb; }
+.cx .kb-col[data-tone="5"] { --accent: #1f9d8f; --pastel: #d9f3ef; --pastel-line: #a7dcd5; }
+.cx .kb-col[data-over] { outline: 3px dashed var(--accent); outline-offset: 3px; background: #e4eaf6; }
+
+.cx .kb-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.cx .kb-col-title { font-size: 18px; font-weight: 800; letter-spacing: -.015em; }
+.cx .kb-col-name { margin: 3px 0 0; color: #3f4b66; font-size: 13.5px; line-height: 1.4; }
+.cx .kb-col-tools { display: flex; flex-wrap: wrap; gap: 2px; margin: -6px -8px 0; }
+
+.cx .kb-cards { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.cx .kb-card { position: relative; display: grid; gap: 7px; padding: 13px 14px 14px; border: 1.5px solid var(--pastel-line); border-radius: 13px; background: var(--pastel); color: var(--cx-ink); cursor: pointer; box-shadow: 0 1px 2px rgb(27 37 64 / 10%); transition: box-shadow .15s, transform .15s; }
+.cx .kb-card:hover { box-shadow: 0 8px 18px rgb(27 37 64 / 16%); transform: translateY(-1px); }
+.cx .kb-card[draggable="true"] { cursor: grab; }
+.cx .kb-card[data-dragging] { opacity: .45; }
+.cx .kb-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cx .kb-code { color: #2b3a5c; font-size: 12px; font-weight: 800; letter-spacing: .09em; }
+.cx .kb-grip { color: #5d6a85; }
+.cx .kb-name { font-size: 15.5px; font-weight: 700; line-height: 1.3; letter-spacing: -.005em; }
+.cx .kb-req { color: #3f4b66; font-size: 12.5px; line-height: 1.45; }
+.cx .kb-tag { justify-self: start; padding: 2px 9px; border-radius: 100px; color: #fff; font-size: 11.5px; font-weight: 700; }
+.cx .kb-tag--req { background: #2857c5; }
+.cx .kb-tag--dep { background: #8a4b04; }
+.cx .kb-card--req { box-shadow: 0 0 0 3px #2857c5; }
+.cx .kb-card--dep { box-shadow: 0 0 0 3px #b45309; }
+.cx .kb-card--focus { box-shadow: 0 0 0 3px var(--cx-ink); }
+
+.cx .kb-empty { margin: 0; padding: 20px 12px; border: 1.5px dashed var(--pastel-line); border-radius: 12px; color: #3f4b66; font-size: 13.5px; line-height: 1.5; text-align: center; }
+.cx .kb-add { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; border: 1.5px dashed #6b7790; border-radius: 12px; background: transparent; color: var(--cx-green-ink); font-size: 14px; font-weight: 700; }
+.cx .kb-add:hover { border-color: var(--cx-green); background: var(--cx-green-soft); }
+
+.cx .kb-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 14px; padding: 0; list-style: none; color: var(--cx-muted); font-size: 13.5px; }
+.cx .kb-legend li { display: inline-flex; align-items: center; gap: 8px; }
+.cx .kb-legend .kb-tag { justify-self: auto; }
+
+/* ---------- Diálogo de gestión de materia ---------- */
+.cx .mg-section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--cx-line); border-radius: 12px; background: #f8faff; }
+.cx .mg-section--danger { border-color: #efbcbc; background: #fff6f6; }
+.cx .mg-section p { margin: 0; color: var(--cx-muted); font-size: 14px; line-height: 1.55; }
+.cx .mg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cx .ui-modal form.mg-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.cx .mg-inline .ui-field { flex: 1 1 220px; }
+
+@media (max-width: 760px) {
+  .cx .plan-hero { grid-template-columns: 1fr; padding: 22px 20px; }
+  .cx .plan-stats { width: 100%; }
+  .cx .plan-stats div { flex: 1; min-width: 0; }
+  .cx .plan-filters { grid-template-columns: 1fr; }
+  .cx .kb-col { flex-basis: 84vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx .kb-card, .cx .plan-card { transition: none; }
+  .cx .kb-card:hover { transform: none; }
+}
