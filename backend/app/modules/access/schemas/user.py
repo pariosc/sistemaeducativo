@@ -11,11 +11,15 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.validation import CI, PersonName, Phone, StrictFlag
 from app.modules.access.models.user import UserRole
 
-CIText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=32)]
-PhoneText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=40)]
-PasswordText = Annotated[str, StringConstraints(min_length=8, max_length=128)]
+PasswordNew = Annotated[str, StringConstraints(min_length=8, max_length=128)]
+CredentialText = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserPublic(BaseModel):
@@ -33,11 +37,11 @@ class UserPublic(BaseModel):
     debe_cambiar_contrasena: bool
 
 
-class LoginInput(BaseModel):
+class LoginInput(StrictInputModel):
     identificador: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=254)
     ]
-    contrasena: Annotated[str, Field(min_length=1, max_length=128)]
+    contrasena: CredentialText
 
 
 class LoginOutput(BaseModel):
@@ -45,19 +49,17 @@ class LoginOutput(BaseModel):
     debe_cambiar_contrasena: bool
 
 
-class PasswordChangeInput(BaseModel):
-    contrasena_actual: Annotated[str, Field(min_length=1, max_length=128)]
-    contrasena_nueva: PasswordText
+class PasswordChangeInput(StrictInputModel):
+    contrasena_actual: CredentialText
+    contrasena_nueva: PasswordNew
 
 
-class UserCreate(BaseModel):
-    ci: CIText
-    nombres: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-    apellidos: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)
-    ]
+class UserCreate(StrictInputModel):
+    ci: CI
+    nombres: PersonName
+    apellidos: PersonName
     correo: EmailStr
-    telefono: PhoneText
+    telefono: Phone
     rol: UserRole
 
     @field_validator("correo")
@@ -65,23 +67,12 @@ class UserCreate(BaseModel):
     def normalize_email(cls, value: EmailStr) -> str:
         return str(value).strip().lower()
 
-    @field_validator("ci")
-    @classmethod
-    def normalize_ci(cls, value: str) -> str:
-        return value.strip().upper()
 
-
-class UserUpdate(BaseModel):
-    ci: CIText | None = None
-    nombres: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-        | None
-    ) = None
-    apellidos: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-        | None
-    ) = None
-    activo: bool | None = None
+class UserUpdate(StrictInputModel):
+    ci: CI | None = None
+    nombres: PersonName | None = None
+    apellidos: PersonName | None = None
+    activo: StrictFlag | None = None
 
     @model_validator(mode="after")
     def reject_null_updates(self):
@@ -89,14 +80,23 @@ class UserUpdate(BaseModel):
             raise ValueError("Los campos enviados no pueden ser null")
         return self
 
-    @field_validator("ci")
-    @classmethod
-    def normalize_ci(cls, value: str | None) -> str | None:
-        return value.strip().upper() if value else value
-
 
 class ProfileUpdate(BaseModel):
-    telefono: PhoneText
+    telefono: Phone
+
+
+class InitialAdminInput(StrictInputModel):
+    ci: CI
+    nombres: PersonName
+    apellidos: PersonName
+    correo: EmailStr
+    telefono: Phone
+    contrasena: PasswordNew
+
+    @field_validator("correo")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
 
 
 class UserCreated(UserPublic):

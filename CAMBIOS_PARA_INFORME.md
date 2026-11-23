@@ -363,3 +363,33 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   se ejecutaron pruebas funcionales en esta actualización.
 - **Secciones del informe a revisar:** ejecución local y reproducibilidad del
   entorno de desarrollo.
+
+## Validación de datos, usabilidad y tema visual — 22-11-2026
+
+- Se añadió un módulo compartido de validación en el frontend con reglas para
+  CI, teléfono, nombres, códigos, correo, contraseñas, fechas, horas, notas y
+  números positivos. Los mensajes son específicos y están en español.
+- El cliente de API convierte errores HTTP en mensajes legibles: 401 indica
+  sesión expirada o credenciales inválidas, 403 indica falta de permisos y 422
+  muestra el campo devuelto por el backend cuando está disponible. Esto también
+  aplica a la descarga de reportes.
+- Se reforzaron los formularios de acceso, cambio de contraseña, perfil,
+  usuarios, catálogos, planes, semestres, paralelos, horarios, excepciones,
+  oferta del estudiante, calificaciones y reportes. Las selecciones vacías ya
+  no se preseleccionan silenciosamente en reportes y se pide confirmación antes
+  de inscribirse o corregir una nota.
+- Se implementó alternancia de tema claro/oscuro con icono sol/luna. El botón
+  muestra la acción siguiente: «Modo claro» cuando está activo el oscuro y
+  «Modo oscuro» cuando está activo el claro. La preferencia se guarda en el
+  navegador, se aplica antes del primer render y el botón está disponible en
+  login, cambio de contraseña y navegación principal.
+- Se mantienen las reglas académicas y autorizaciones del backend. Las
+  validaciones del frontend son una ayuda; el servidor sigue siendo la fuente
+  autoritativa.
+- Verificación ejecutada: `uv run ruff check app migrations` aprobó, `uv run
+  pytest` aprobó 18/18, `bun run typecheck` y `bun run build` aprobaron, y los
+  endpoints `/api/health` y `/` respondieron HTTP 200 después de reiniciar API
+  y PostgreSQL. Vite conserva los avisos conocidos de Zod y tamaño de bundle.
+- **Secciones del informe a revisar:** RNF de usabilidad y seguridad,
+  validaciones por pantalla, manejo de errores, accesibilidad de mensajes,
+  capturas con tema claro y oscuro, y registro de pruebas de regresión.

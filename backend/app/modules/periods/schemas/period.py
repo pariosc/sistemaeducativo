@@ -1,23 +1,25 @@
 import uuid
 from datetime import date
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-Denomination = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)
-]
+from app.core.validation import descriptive_text, ensure_date_order
+
+Denomination = descriptive_text(160)
 
 
-class PeriodCreate(BaseModel):
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PeriodCreate(StrictInputModel):
     denominacion: Denomination
     fecha_inicio: date
     fecha_fin: date
 
     @model_validator(mode="after")
     def valid_date_range(self):
-        if self.fecha_fin < self.fecha_inicio:
-            raise ValueError("La fecha final no puede ser anterior a la fecha inicial")
+        ensure_date_order(self.fecha_inicio, self.fecha_fin)
         return self
 
 

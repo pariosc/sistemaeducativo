@@ -40,11 +40,12 @@ export function DialogError({ error }: { error: string }) {
   return error ? <p role="alert" className="ui-alert ui-alert-error ui-alert-flush">{error}</p> : null
 }
 
-export function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
+export function Field({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
     <div className="ui-field">
       <label htmlFor={id}>{label}</label>
       {children}
+      {error && <p id={`${id}-error`} role="alert" className="ui-field-error">{error}</p>}
       {hint && <p id={`${id}-hint`} className="ui-field-hint">{hint}</p>}
     </div>
   )

@@ -2,12 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 GradeValue = Annotated[StrictInt, Field(ge=0, le=100)]
 
 
-class GradeInput(BaseModel):
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class GradeInput(StrictInputModel):
     nota_final: GradeValue
 
 

@@ -1,36 +1,29 @@
 import uuid
-from typing import Annotated
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    StringConstraints,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.core.validation import Code, PositiveInt, StrictFlag, descriptive_text
 from app.modules.curriculum.models.entities import EstadoPlan, ModalidadPlan
 
-CodeText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
-NameText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
+CodeText = Code
+NameText = descriptive_text(160)
+ShortText = descriptive_text(120)
 
 
-class CareerCreate(BaseModel):
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class CareerCreate(StrictInputModel):
     codigo: CodeText
     nombre: NameText
     facultad_id: uuid.UUID
 
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str) -> str:
-        return value.upper()
 
-
-class CareerUpdate(BaseModel):
+class CareerUpdate(StrictInputModel):
     codigo: CodeText | None = None
     nombre: NameText | None = None
-    activo: bool | None = None
+    activo: StrictFlag | None = None
     facultad_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
@@ -39,11 +32,6 @@ class CareerUpdate(BaseModel):
         if not values or any(value is None for value in values.values()):
             raise ValueError("Envía al menos un campo y ninguno puede ser null")
         return self
-
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str | None) -> str | None:
-        return value.upper() if value else value
 
 
 class CareerPublic(BaseModel):
@@ -58,20 +46,15 @@ class CareerPublic(BaseModel):
     activo: bool
 
 
-class FacultyCreate(BaseModel):
+class FacultyCreate(StrictInputModel):
     codigo: CodeText
     nombre: NameText
 
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str) -> str:
-        return value.upper()
 
-
-class FacultyUpdate(BaseModel):
+class FacultyUpdate(StrictInputModel):
     codigo: CodeText | None = None
     nombre: NameText | None = None
-    activo: bool | None = None
+    activo: StrictFlag | None = None
 
     @model_validator(mode="after")
     def require_updates(self):
@@ -79,11 +62,6 @@ class FacultyUpdate(BaseModel):
         if not values or any(value is None for value in values.values()):
             raise ValueError("Envía al menos un campo y ninguno puede ser null")
         return self
-
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str | None) -> str | None:
-        return value.upper() if value else value
 
 
 class FacultyPublic(BaseModel):
@@ -95,20 +73,15 @@ class FacultyPublic(BaseModel):
     activo: bool
 
 
-class SubjectCreate(BaseModel):
+class SubjectCreate(StrictInputModel):
     codigo: CodeText
     nombre: NameText
 
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str) -> str:
-        return value.upper()
 
-
-class SubjectUpdate(BaseModel):
+class SubjectUpdate(StrictInputModel):
     codigo: CodeText | None = None
     nombre: NameText | None = None
-    activo: bool | None = None
+    activo: StrictFlag | None = None
 
     @model_validator(mode="after")
     def require_updates(self):
@@ -116,11 +89,6 @@ class SubjectUpdate(BaseModel):
         if not values or any(value is None for value in values.values()):
             raise ValueError("Envía al menos un campo y ninguno puede ser null")
         return self
-
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str | None) -> str | None:
-        return value.upper() if value else value
 
 
 class SubjectPublic(BaseModel):
@@ -132,18 +100,13 @@ class SubjectPublic(BaseModel):
     activo: bool
 
 
-class PlanCreate(BaseModel):
+class PlanCreate(StrictInputModel):
     carrera_id: uuid.UUID
     codigo: CodeText
     modalidad: ModalidadPlan
 
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str) -> str:
-        return value.upper()
 
-
-class PlanUpdate(BaseModel):
+class PlanUpdate(StrictInputModel):
     codigo: CodeText | None = None
     estado: EstadoPlan | None = None
 
@@ -154,23 +117,15 @@ class PlanUpdate(BaseModel):
             raise ValueError("Envía al menos un campo y ninguno puede ser null")
         return self
 
-    @field_validator("codigo")
-    @classmethod
-    def uppercase_code(cls, value: str | None) -> str | None:
-        return value.upper() if value else value
+
+class UnitCreate(StrictInputModel):
+    numero: PositiveInt
+    nombre: ShortText
 
 
-class UnitCreate(BaseModel):
-    numero: Annotated[int, Field(gt=0)]
-    nombre: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-
-
-class UnitUpdate(BaseModel):
-    numero: Annotated[int, Field(gt=0)] | None = None
-    nombre: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-        | None
-    ) = None
+class UnitUpdate(StrictInputModel):
+    numero: PositiveInt | None = None
+    nombre: ShortText | None = None
 
     @model_validator(mode="after")
     def require_updates(self):
@@ -189,16 +144,16 @@ class UnitPublic(BaseModel):
     nombre: str
 
 
-class PlanSubjectCreate(BaseModel):
+class PlanSubjectCreate(StrictInputModel):
     materia_id: uuid.UUID
     unidad_id: uuid.UUID
 
 
-class PlanSubjectUpdate(BaseModel):
+class PlanSubjectUpdate(StrictInputModel):
     unidad_id: uuid.UUID
 
 
-class PrerequisiteCreate(BaseModel):
+class PrerequisiteCreate(StrictInputModel):
     requisito_materia_plan_id: uuid.UUID
 
 
@@ -225,7 +180,7 @@ class PlanPublic(BaseModel):
     unidades: list[UnitWithSubjects]
 
 
-class StudentPlanAssignment(BaseModel):
+class StudentPlanAssignment(StrictInputModel):
     plan_estudio_id: uuid.UUID
 
 

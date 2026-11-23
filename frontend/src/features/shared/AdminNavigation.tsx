@@ -1,4 +1,5 @@
 import { useAuth } from "../auth/AuthContext"
+import { ThemeToggle } from "./ThemeToggle"
 
 type Entry = { label: string; href: string }
 
@@ -66,12 +67,15 @@ export function AdminNavigation() {
         {groups.map((group) => <SidebarGroup key={group.title} {...group} />)}
         <SidebarGroup title="Mi cuenta" entries={[{ label: "Perfil", href: "/perfil" }]} />
       </nav>
-      <button
-        className="sidebar-logout"
-        onClick={() => void logout().then(() => { window.location.href = "/login" })}
-      >
-        Cerrar sesión
-      </button>
+      <div className="sidebar-actions">
+        <ThemeToggle />
+        <button
+          className="sidebar-logout"
+          onClick={() => void logout().then(() => { window.location.href = "/login" })}
+        >
+          Cerrar sesión
+        </button>
+      </div>
     </aside>
   )
 }

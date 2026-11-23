@@ -6,6 +6,7 @@ import type { AcademicPeriod, Course, CourseSchedule, ScheduleException, Schedul
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
+import { codeSchema, dateSchema, messageOf, positiveIntSchema, timeSchema } from "../shared/validation"
 import { PeriodBar } from "../planning/PeriodBar"
 import { PlanningShell } from "../planning/PlanningShell"
 import { WEEKDAYS, formatDate, formatDateWithWeekday, formatTime, plural } from "../planning/dates"
@@ -533,6 +534,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
   const [end, setEnd] = useState("")
   const [datesTouched, setDatesTouched] = useState(false)
   const [teacherId, setTeacherId] = useState("")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
 
   if (firstSubject === "") {
     return (
@@ -554,6 +556,14 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const nextErrors = {
+      paralelo: messageOf(codeSchema, shownParallel),
+      cupo: messageOf(positiveIntSchema, Number(capacity)),
+      fecha_inicio: messageOf(dateSchema, shownStart),
+      fecha_fin: messageOf(dateSchema, shownEnd) ?? (shownStart && shownEnd <= shownStart ? "La fecha de fin debe ser posterior a la de inicio." : null),
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
     onSubmit({
       materia_plan_id: subjectId, periodo_id: periodId, paralelo: shownParallel.trim().toUpperCase(), cupo: Number(capacity),
       fecha_inicio: shownStart, fecha_fin: shownEnd, ...(teacherId ? { docente_id: teacherId } : {}),
@@ -579,19 +589,19 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
           </select>
         </Field>
         <div className="pl-form-row">
-          <Field id="course-parallel" label="Paralelo" hint="Se sugiere la siguiente letra libre.">
-            <input id="course-parallel" className="ui-input" value={shownParallel} onChange={(event) => { setParallelTouched(true); setParallel(event.target.value.toUpperCase()) }} maxLength={32} required autoComplete="off" aria-describedby="course-parallel-hint" />
+          <Field id="course-parallel" label="Paralelo" hint="Se sugiere la siguiente letra libre." error={errors.paralelo}>
+            <input id="course-parallel" className="ui-input" value={shownParallel} onChange={(event) => { setParallelTouched(true); setParallel(event.target.value.toUpperCase()); setErrors((current) => ({ ...current, paralelo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.paralelo)} aria-describedby={errors.paralelo ? "course-parallel-error course-parallel-hint" : "course-parallel-hint"} />
           </Field>
-          <Field id="course-capacity" label="Cupo">
-            <input id="course-capacity" className="ui-input" type="number" inputMode="numeric" min={1} value={capacity} onChange={(event) => setCapacity(event.target.value)} required />
+          <Field id="course-capacity" label="Cupo" error={errors.cupo}>
+            <input id="course-capacity" className="ui-input" type="number" inputMode="numeric" min={1} value={capacity} onChange={(event) => { setCapacity(event.target.value); setErrors((current) => ({ ...current, cupo: null })) }} required aria-invalid={Boolean(errors.cupo)} aria-describedby={errors.cupo ? "course-capacity-error" : undefined} />
           </Field>
         </div>
         <div className="pl-form-row">
-          <Field id="course-start" label="Inicio">
-            <input id="course-start" className="ui-input" type="date" value={shownStart} onChange={(event) => { setDatesTouched(true); setStart(event.target.value); if (!datesTouched) setEnd(shownEnd) }} required />
+          <Field id="course-start" label="Inicio" error={errors.fecha_inicio}>
+            <input id="course-start" className="ui-input" type="date" value={shownStart} onChange={(event) => { setDatesTouched(true); setStart(event.target.value); if (!datesTouched) setEnd(shownEnd); setErrors((current) => ({ ...current, fecha_inicio: null })) }} required aria-invalid={Boolean(errors.fecha_inicio)} aria-describedby={errors.fecha_inicio ? "course-start-error" : undefined} />
           </Field>
-          <Field id="course-end" label="Fin">
-            <input id="course-end" className="ui-input" type="date" value={shownEnd} min={shownStart || undefined} onChange={(event) => { setDatesTouched(true); setEnd(event.target.value); if (!datesTouched) setStart(shownStart) }} required />
+          <Field id="course-end" label="Fin" error={errors.fecha_fin}>
+            <input id="course-end" className="ui-input" type="date" value={shownEnd} min={shownStart || undefined} onChange={(event) => { setDatesTouched(true); setEnd(event.target.value); if (!datesTouched) setStart(shownStart); setErrors((current) => ({ ...current, fecha_fin: null })) }} required aria-invalid={Boolean(errors.fecha_fin)} aria-describedby={errors.fecha_fin ? "course-end-error" : undefined} />
           </Field>
         </div>
         <p className="ui-field-hint" style={{ marginTop: -8 }}>Por defecto usa las fechas del semestre. En planes modulares, ajústalas al bloque mensual del paralelo.</p>
@@ -613,9 +623,18 @@ function EditCourseDialog({ course, teachers, busy, error, onClose, onSubmit }: 
   const [start, setStart] = useState(course.fecha_inicio)
   const [end, setEnd] = useState(course.fecha_fin)
   const [teacherId, setTeacherId] = useState(course.docente_id ?? "")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const nextErrors = {
+      paralelo: messageOf(codeSchema, parallel),
+      cupo: messageOf(positiveIntSchema, Number(capacity)),
+      fecha_inicio: messageOf(dateSchema, start),
+      fecha_fin: messageOf(dateSchema, end) ?? (start && end <= start ? "La fecha de fin debe ser posterior a la de inicio." : null),
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
     const patch: CoursePatch = {}
     if (parallel.trim().toUpperCase() !== course.paralelo) patch.paralelo = parallel.trim().toUpperCase()
     if (Number(capacity) !== course.cupo) patch.cupo = Number(capacity)
@@ -630,16 +649,16 @@ function EditCourseDialog({ course, teachers, busy, error, onClose, onSubmit }: 
       <form onSubmit={submit}>
         <DialogError error={error} />
         <div className="pl-form-row">
-          <Field id="edit-parallel" label="Paralelo">
-            <input id="edit-parallel" className="ui-input" value={parallel} onChange={(event) => setParallel(event.target.value.toUpperCase())} maxLength={32} required autoComplete="off" data-autofocus="" />
+          <Field id="edit-parallel" label="Paralelo" error={errors.paralelo}>
+            <input id="edit-parallel" className="ui-input" value={parallel} onChange={(event) => { setParallel(event.target.value.toUpperCase()); setErrors((current) => ({ ...current, paralelo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.paralelo)} aria-describedby={errors.paralelo ? "edit-parallel-error" : undefined} data-autofocus="" />
           </Field>
-          <Field id="edit-capacity" label="Cupo">
-            <input id="edit-capacity" className="ui-input" type="number" inputMode="numeric" min={1} value={capacity} onChange={(event) => setCapacity(event.target.value)} required />
+          <Field id="edit-capacity" label="Cupo" error={errors.cupo}>
+            <input id="edit-capacity" className="ui-input" type="number" inputMode="numeric" min={1} value={capacity} onChange={(event) => { setCapacity(event.target.value); setErrors((current) => ({ ...current, cupo: null })) }} required aria-invalid={Boolean(errors.cupo)} aria-describedby={errors.cupo ? "edit-capacity-error" : undefined} />
           </Field>
         </div>
         <div className="pl-form-row">
-          <Field id="edit-start" label="Inicio"><input id="edit-start" className="ui-input" type="date" value={start} onChange={(event) => setStart(event.target.value)} required /></Field>
-          <Field id="edit-end" label="Fin"><input id="edit-end" className="ui-input" type="date" value={end} min={start || undefined} onChange={(event) => setEnd(event.target.value)} required /></Field>
+          <Field id="edit-start" label="Inicio" error={errors.fecha_inicio}><input id="edit-start" className="ui-input" type="date" value={start} onChange={(event) => { setStart(event.target.value); setErrors((current) => ({ ...current, fecha_inicio: null })) }} required aria-invalid={Boolean(errors.fecha_inicio)} aria-describedby={errors.fecha_inicio ? "edit-start-error" : undefined} /></Field>
+          <Field id="edit-end" label="Fin" error={errors.fecha_fin}><input id="edit-end" className="ui-input" type="date" value={end} min={start || undefined} onChange={(event) => { setEnd(event.target.value); setErrors((current) => ({ ...current, fecha_fin: null })) }} required aria-invalid={Boolean(errors.fecha_fin)} aria-describedby={errors.fecha_fin ? "edit-end-error" : undefined} /></Field>
         </div>
         <Field id="edit-teacher" label="Docente">
           <select id="edit-teacher" className="ui-select" value={teacherId} onChange={(event) => setTeacherId(event.target.value)}>
@@ -663,7 +682,8 @@ function AddScheduleDialog({ busy, error, onClose, onSubmit }: DialogBase & { on
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (to <= from) { setLocalError("La hora de fin debe ser posterior a la hora de inicio."); return }
+    const invalid = messageOf(timeSchema, from) ?? messageOf(timeSchema, to) ?? (to <= from ? "La hora de fin debe ser posterior a la hora de inicio." : null)
+    if (invalid) { setLocalError(invalid); return }
     setLocalError("")
     onSubmit({ dia_semana: day, hora_inicio: from, hora_fin: to, aula: room.trim() })
   }
@@ -701,7 +721,10 @@ function AddExceptionDialog({ course, busy, error, onClose, onSubmit }: DialogBa
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (type === "REPROGRAMADA" && to <= from) { setLocalError("La hora de fin debe ser posterior a la hora de inicio."); return }
+    const invalid = messageOf(dateSchema, original) ?? (type === "REPROGRAMADA"
+      ? messageOf(dateSchema, newDate) ?? messageOf(timeSchema, from) ?? messageOf(timeSchema, to) ?? (to <= from ? "La hora de fin debe ser posterior a la hora de inicio." : null)
+      : null)
+    if (invalid) { setLocalError(invalid); return }
     setLocalError("")
     onSubmit(type === "CANCELADA"
       ? { fecha_original: original, tipo: type, motivo: reason.trim() || undefined }

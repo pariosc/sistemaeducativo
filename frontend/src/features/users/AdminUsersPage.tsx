@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { api, type Role, type User } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { AdminNavigation } from "../shared/AdminNavigation"
+import { ciSchema, emailSchema, messageOf, personNameSchema, phoneSchema } from "../shared/validation"
 
 const emptyForm = { ci: "", nombres: "", apellidos: "", correo: "", telefono: "", rol: "DOCENTE" as Role }
 
@@ -12,6 +13,7 @@ export function AdminUsersPage() {
   const [form, setForm] = useState(emptyForm)
   const [temporaryPassword, setTemporaryPassword] = useState("")
   const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({})
   const [loading, setLoading] = useState(true)
 
   const reload = () => api.listUsers().then(setUsers).catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false))
@@ -20,8 +22,17 @@ export function AdminUsersPage() {
   async function createUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
+    const errors = {
+      ci: messageOf(ciSchema, form.ci),
+      nombres: messageOf(personNameSchema, form.nombres),
+      apellidos: messageOf(personNameSchema, form.apellidos),
+      correo: messageOf(emailSchema, form.correo),
+      telefono: messageOf(phoneSchema, form.telefono),
+    }
+    setFieldErrors(errors)
+    if (Object.values(errors).some(Boolean)) return
     try {
-      const created = await api.createUser(form)
+      const created = await api.createUser({ ...form, ci: form.ci.trim().toUpperCase(), correo: form.correo.trim().toLowerCase() })
       setTemporaryPassword(created.contrasena_temporal)
       setForm(emptyForm)
       await reload()
@@ -46,8 +57,14 @@ export function AdminUsersPage() {
     if (apellidos === null) return
     const ci = window.prompt("CI", target.ci)
     if (ci === null) return
+    const errors = [
+      messageOf(personNameSchema, nombres),
+      messageOf(personNameSchema, apellidos),
+      messageOf(ciSchema, ci),
+    ].filter((value): value is string => Boolean(value))
+    if (errors.length > 0) { setError(errors.join(" ")); return }
     try {
-      await api.updateUser(target.id, { nombres, apellidos, ci })
+      await api.updateUser(target.id, { nombres: nombres.trim(), apellidos: apellidos.trim(), ci: ci.trim().toUpperCase() })
       await reload()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudieron corregir los datos.")
@@ -79,12 +96,17 @@ export function AdminUsersPage() {
         <div className="profile-grid users-grid">
           <section className="profile-card">
             <h2>Crear cuenta</h2>
-            <form className="stack-form" onSubmit={(event) => void createUser(event)}>
-              <label>CI<input className="form-input" value={form.ci} onChange={(e) => setForm({ ...form, ci: e.target.value })} required /></label>
-              <label>Nombres<input className="form-input" value={form.nombres} onChange={(e) => setForm({ ...form, nombres: e.target.value })} required /></label>
-              <label>Apellidos<input className="form-input" value={form.apellidos} onChange={(e) => setForm({ ...form, apellidos: e.target.value })} required /></label>
-              <label>Correo<input className="form-input" type="email" value={form.correo} onChange={(e) => setForm({ ...form, correo: e.target.value })} required /></label>
-              <label>Teléfono<input className="form-input" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} required /></label>
+            <form className="stack-form" noValidate onSubmit={(event) => void createUser(event)}>
+              <label>CI<input className="form-input" value={form.ci} onChange={(e) => { setForm({ ...form, ci: e.target.value }); setFieldErrors((current) => ({ ...current, ci: null })) }} maxLength={32} required aria-invalid={Boolean(fieldErrors.ci)} /></label>
+              {fieldErrors.ci && <span className="field-error">{fieldErrors.ci}</span>}
+              <label>Nombres<input className="form-input" value={form.nombres} onChange={(e) => { setForm({ ...form, nombres: e.target.value }); setFieldErrors((current) => ({ ...current, nombres: null })) }} maxLength={120} required aria-invalid={Boolean(fieldErrors.nombres)} /></label>
+              {fieldErrors.nombres && <span className="field-error">{fieldErrors.nombres}</span>}
+              <label>Apellidos<input className="form-input" value={form.apellidos} onChange={(e) => { setForm({ ...form, apellidos: e.target.value }); setFieldErrors((current) => ({ ...current, apellidos: null })) }} maxLength={120} required aria-invalid={Boolean(fieldErrors.apellidos)} /></label>
+              {fieldErrors.apellidos && <span className="field-error">{fieldErrors.apellidos}</span>}
+              <label>Correo<input className="form-input" type="email" value={form.correo} onChange={(e) => { setForm({ ...form, correo: e.target.value }); setFieldErrors((current) => ({ ...current, correo: null })) }} maxLength={254} required aria-invalid={Boolean(fieldErrors.correo)} /></label>
+              {fieldErrors.correo && <span className="field-error">{fieldErrors.correo}</span>}
+              <label>Teléfono<input className="form-input" value={form.telefono} onChange={(e) => { setForm({ ...form, telefono: e.target.value }); setFieldErrors((current) => ({ ...current, telefono: null })) }} maxLength={40} required aria-invalid={Boolean(fieldErrors.telefono)} /></label>
+              {fieldErrors.telefono && <span className="field-error">{fieldErrors.telefono}</span>}
               <label>Rol<select className="form-input" value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Role })}>
                 <option value="DOCENTE">Docente</option><option value="ESTUDIANTE">Estudiante</option>
                 {user?.es_administrador_principal && <option value="ADMINISTRADOR">Administrador</option>}

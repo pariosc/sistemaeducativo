@@ -5,6 +5,7 @@ import { api } from "../../api/client"
 import type { Career, Faculty, Subject } from "../../api/client"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
+import { codeSchema, labelSchema, messageOf } from "../shared/validation"
 import { CurriculumShell } from "./CurriculumShell"
 import type { CurriculumSection } from "./CurriculumShell"
 
@@ -188,8 +189,8 @@ function CatalogFormDialog({ config, item, faculties, facultyAware, busy, error,
   const currentFaculty = item ? (item as Career).facultad_id : ""
   const [codigo, setCodigo] = useState(item?.codigo ?? "")
   const [nombre, setNombre] = useState(item?.nombre ?? "")
-  // Solo se puede elegir una facultad activa: si la actual está inactiva, hay que escoger otra.
   const [facultyId, setFacultyId] = useState(faculties.some((faculty) => faculty.id === currentFaculty) ? currentFaculty : "")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
   const title = item ? `Editar ${config.singular.toLowerCase()} ${item.codigo}` : config.newLabel
 
   if (facultyAware && faculties.length === 0) {
@@ -206,6 +207,13 @@ function CatalogFormDialog({ config, item, faculties, facultyAware, busy, error,
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const nextErrors = {
+      codigo: messageOf(codeSchema, codigo),
+      nombre: messageOf(labelSchema, nombre),
+      facultad_id: facultyAware && !facultyId ? "Selecciona una facultad activa." : null,
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
     onSubmit({ codigo: codigo.trim().toUpperCase(), nombre: nombre.trim(), facultad_id: facultyId })
   }
 
@@ -213,15 +221,15 @@ function CatalogFormDialog({ config, item, faculties, facultyAware, busy, error,
     <Modal title={title} description="Todos los campos son obligatorios." onClose={onClose} locked={busy}>
       <form onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="cat-code" label="Código" hint="Se guarda en mayúsculas y debe ser único.">
-          <input id="cat-code" className="ui-input" value={codigo} onChange={(event) => setCodigo(event.target.value)} maxLength={32} required autoComplete="off" aria-describedby="cat-code-hint" data-autofocus="" />
+        <Field id="cat-code" label="Código" hint="Se guarda en mayúsculas y debe ser único." error={errors.codigo}>
+          <input id="cat-code" className="ui-input" value={codigo} onChange={(event) => { setCodigo(event.target.value); setErrors((current) => ({ ...current, codigo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.codigo)} aria-describedby={errors.codigo ? "cat-code-error cat-code-hint" : "cat-code-hint"} data-autofocus="" />
         </Field>
-        <Field id="cat-name" label="Nombre">
-          <input id="cat-name" className="ui-input" value={nombre} onChange={(event) => setNombre(event.target.value)} maxLength={160} required autoComplete="off" />
+        <Field id="cat-name" label="Nombre" error={errors.nombre}>
+          <input id="cat-name" className="ui-input" value={nombre} onChange={(event) => { setNombre(event.target.value); setErrors((current) => ({ ...current, nombre: null })) }} maxLength={160} required autoComplete="off" aria-invalid={Boolean(errors.nombre)} aria-describedby={errors.nombre ? "cat-name-error" : undefined} />
         </Field>
         {facultyAware && (
-          <Field id="cat-faculty" label="Facultad" hint={item && !faculties.some((faculty) => faculty.id === currentFaculty) ? "La facultad actual está inactiva: elige una activa." : undefined}>
-            <select id="cat-faculty" className="ui-select" value={facultyId} onChange={(event) => setFacultyId(event.target.value)} required aria-describedby="cat-faculty-hint">
+          <Field id="cat-faculty" label="Facultad" hint={item && !faculties.some((faculty) => faculty.id === currentFaculty) ? "La facultad actual está inactiva: elige una activa." : undefined} error={errors.facultad_id}>
+            <select id="cat-faculty" className="ui-select" value={facultyId} onChange={(event) => { setFacultyId(event.target.value); setErrors((current) => ({ ...current, facultad_id: null })) }} required aria-invalid={Boolean(errors.facultad_id)} aria-describedby={[errors.facultad_id ? "cat-faculty-error" : "", (item && !faculties.some((faculty) => faculty.id === currentFaculty)) ? "cat-faculty-hint" : ""].filter(Boolean).join(" ") || undefined}>
               <option value="">Selecciona una facultad</option>
               {faculties.map((faculty) => <option key={faculty.id} value={faculty.id}>{faculty.codigo} — {faculty.nombre}</option>)}
             </select>

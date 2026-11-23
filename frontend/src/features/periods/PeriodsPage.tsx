@@ -6,6 +6,7 @@ import type { AcademicPeriod, Course, Holiday, StudentAuthorization } from "../.
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
+import { dateSchema, descriptionSchema, labelSchema, messageOf } from "../shared/validation"
 import { PlanningShell } from "../planning/PlanningShell"
 import { PERIOD_STATE_LABEL, PERIOD_STATE_TONE, dayOfMonth, daysBetween, formatDate, formatDateWithWeekday, monthShort, periodState, plural, sortPeriods } from "../planning/dates"
 import type { Tone } from "../planning/dates"
@@ -286,22 +287,30 @@ function NewPeriodDialog({ busy, error, onClose, onSubmit }: DialogBase & { onSu
   const [name, setName] = useState("")
   const [start, setStart] = useState("")
   const [end, setEnd] = useState("")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const nextErrors = {
+      denominacion: messageOf(labelSchema, name),
+      fecha_inicio: messageOf(dateSchema, start),
+      fecha_fin: messageOf(dateSchema, end) ?? (start && end <= start ? "La fecha de fin debe ser posterior a la de inicio." : null),
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
     onSubmit({ denominacion: name.trim(), fecha_inicio: start, fecha_fin: end })
   }
   return (
     <Modal title="Nuevo semestre académico" description="Después de crearlo podrás cargar su calendario y programar su oferta. Todos los campos son obligatorios." onClose={onClose} locked={busy}>
       <form onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="period-name" label="Denominación" hint="Ejemplo: 2027-I.">
-          <input id="period-name" className="ui-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={160} required autoComplete="off" aria-describedby="period-name-hint" data-autofocus="" />
+        <Field id="period-name" label="Denominación" hint="Ejemplo: 2027-I." error={errors.denominacion}>
+          <input id="period-name" className="ui-input" value={name} onChange={(event) => { setName(event.target.value); setErrors((current) => ({ ...current, denominacion: null })) }} maxLength={160} required autoComplete="off" aria-invalid={Boolean(errors.denominacion)} aria-describedby={errors.denominacion ? "period-name-error period-name-hint" : "period-name-hint"} data-autofocus="" />
         </Field>
-        <Field id="period-start" label="Fecha de inicio">
-          <input id="period-start" className="ui-input" type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
+        <Field id="period-start" label="Fecha de inicio" error={errors.fecha_inicio}>
+          <input id="period-start" className="ui-input" type="date" value={start} onChange={(event) => { setStart(event.target.value); setErrors((current) => ({ ...current, fecha_inicio: null })) }} required aria-invalid={Boolean(errors.fecha_inicio)} aria-describedby={errors.fecha_inicio ? "period-start-error" : undefined} />
         </Field>
-        <Field id="period-end" label="Fecha de finalización" hint="No puede ser anterior a la fecha de inicio.">
-          <input id="period-end" className="ui-input" type="date" value={end} min={start || undefined} onChange={(event) => setEnd(event.target.value)} required aria-describedby="period-end-hint" />
+        <Field id="period-end" label="Fecha de finalización" hint="No puede ser anterior a la fecha de inicio." error={errors.fecha_fin}>
+          <input id="period-end" className="ui-input" type="date" value={end} min={start || undefined} onChange={(event) => { setEnd(event.target.value); setErrors((current) => ({ ...current, fecha_fin: null })) }} required aria-invalid={Boolean(errors.fecha_fin)} aria-describedby={errors.fecha_fin ? "period-end-error period-end-hint" : "period-end-hint"} />
         </Field>
         <FormActions busy={busy} onClose={onClose} submitLabel="Crear semestre" icon="check" />
       </form>
@@ -312,15 +321,26 @@ function NewPeriodDialog({ busy, error, onClose, onSubmit }: DialogBase & { onSu
 function NewHolidayDialog({ period, busy, error, onClose, onSubmit }: DialogBase & { period: AcademicPeriod; onSubmit: (data: { fecha: string; descripcion: string }) => void }) {
   const [date, setDate] = useState("")
   const [description, setDescription] = useState("")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextErrors = {
+      fecha: messageOf(dateSchema, date) ?? (date < period.fecha_inicio || date > period.fecha_fin ? "La fecha debe estar dentro del semestre." : null),
+      descripcion: messageOf(descriptionSchema, description),
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
+    onSubmit({ fecha: date, descripcion: description.trim() })
+  }
   return (
     <Modal title="Agregar feriado" description={`Se excluirá de las clases de todos los paralelos del semestre ${period.denominacion}.`} onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); onSubmit({ fecha: date, descripcion: description.trim() }) }}>
+      <form onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="holiday-date" label="Fecha" hint={`Debe estar entre ${formatDate(period.fecha_inicio)} y ${formatDate(period.fecha_fin)}.`}>
-          <input id="holiday-date" className="ui-input" type="date" value={date} min={period.fecha_inicio} max={period.fecha_fin} onChange={(event) => setDate(event.target.value)} required aria-describedby="holiday-date-hint" data-autofocus="" />
+        <Field id="holiday-date" label="Fecha" hint={`Debe estar entre ${formatDate(period.fecha_inicio)} y ${formatDate(period.fecha_fin)}.`} error={errors.fecha}>
+          <input id="holiday-date" className="ui-input" type="date" value={date} min={period.fecha_inicio} max={period.fecha_fin} onChange={(event) => { setDate(event.target.value); setErrors((current) => ({ ...current, fecha: null })) }} required aria-invalid={Boolean(errors.fecha)} aria-describedby={errors.fecha ? "holiday-date-error holiday-date-hint" : "holiday-date-hint"} data-autofocus="" />
         </Field>
-        <Field id="holiday-desc" label="Descripción" hint="Ejemplo: Día del Trabajo.">
-          <input id="holiday-desc" className="ui-input" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={160} required autoComplete="off" aria-describedby="holiday-desc-hint" />
+        <Field id="holiday-desc" label="Descripción" hint="Ejemplo: Día del Trabajo." error={errors.descripcion}>
+          <input id="holiday-desc" className="ui-input" value={description} onChange={(event) => { setDescription(event.target.value); setErrors((current) => ({ ...current, descripcion: null })) }} maxLength={160} required autoComplete="off" aria-invalid={Boolean(errors.descripcion)} aria-describedby={errors.descripcion ? "holiday-desc-error holiday-desc-hint" : "holiday-desc-hint"} />
         </Field>
         <FormActions busy={busy} onClose={onClose} submitLabel="Agregar feriado" icon="check" />
       </form>

@@ -3,6 +3,15 @@ param()
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$env:UV_LINK_MODE = "copy"
+if (-not $env:UV_PROJECT_ENVIRONMENT) {
+    $configuredVenv = [Environment]::GetEnvironmentVariable("UV_PROJECT_ENVIRONMENT", "User")
+    if ($configuredVenv) {
+        $env:UV_PROJECT_ENVIRONMENT = $configuredVenv
+    } else {
+        $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:LOCALAPPDATA "sistemaeducativo\backend\.venv"
+    }
+}
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

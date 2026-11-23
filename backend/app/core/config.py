@@ -5,6 +5,8 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.core.validation import is_valid_cookie_name, is_valid_origin
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -31,6 +33,20 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    @field_validator("app_env")
+    @classmethod
+    def valid_app_env(cls, value: str) -> str:
+        if value not in {"development", "test", "production"}:
+            raise ValueError("APP_ENV debe ser development, test o production")
+        return value
+
+    @field_validator("session_cookie_name")
+    @classmethod
+    def valid_cookie_name(cls, value: str) -> str:
+        if not is_valid_cookie_name(value):
+            raise ValueError("SESSION_COOKIE_NAME solo admite letras, números, - y _ (1-64)")
+        return value
+
     @field_validator("session_ttl_hours")
     @classmethod
     def valid_ttl(cls, value: int) -> int:
@@ -47,10 +63,18 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_origins(cls, value: str | list[str]) -> str | list[str]:
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+    def parse_origins(cls, value: str | list[str]) -> list[str]:
+        origins = (
+            [origin.strip() for origin in value.split(",") if origin.strip()]
+            if isinstance(value, str)
+            else list(value)
+        )
+        if not origins:
+            raise ValueError("CORS_ORIGINS debe contener al menos un origen")
+        for origin in origins:
+            if not is_valid_origin(origin):
+                raise ValueError(f"Origen inválido en CORS_ORIGINS: {origin}")
+        return origins
 
 
 @lru_cache

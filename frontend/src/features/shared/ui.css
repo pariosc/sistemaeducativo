@@ -98,6 +98,8 @@
 .cx .ui-field { display: grid; gap: 6px; }
 .cx .ui-field > label { font-size: 14px; font-weight: 650; }
 .cx .ui-field-hint { margin: 0; color: var(--cx-muted); font-size: 13px; line-height: 1.5; }
+.cx .ui-field-error { margin: 0; color: #b42332; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.cx :is(.ui-input, .ui-select)[aria-invalid="true"] { border-color: #b42332; background: #fff6f7; }
 .cx .ui-input, .cx .ui-select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1.5px solid var(--cx-line-strong); border-radius: 10px; background: #fff; color: var(--cx-ink); font-size: 15px; }
 .cx .ui-input::placeholder { color: #5d6778; }
 .cx .ui-fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }

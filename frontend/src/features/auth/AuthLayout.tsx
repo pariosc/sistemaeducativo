@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
 
+import { ThemeToggle } from "../shared/ThemeToggle"
+
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <main className="auth-layout">
@@ -13,6 +15,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         <span className="brand-footer">Programación IV · 2026</span>
       </aside>
       <section className="auth-content">
+        <ThemeToggle floating />
         <div className="auth-card">{children}</div>
         <p className="auth-legal">Sistema Web de Gestión Académica</p>
       </section>

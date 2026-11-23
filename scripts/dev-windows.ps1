@@ -3,6 +3,16 @@ param()
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$env:Path = "$([Environment]::GetEnvironmentVariable('Path', 'Machine'));$([Environment]::GetEnvironmentVariable('Path', 'User'))"
+$env:UV_LINK_MODE = "copy"
+if (-not $env:UV_PROJECT_ENVIRONMENT) {
+    $configuredVenv = [Environment]::GetEnvironmentVariable("UV_PROJECT_ENVIRONMENT", "User")
+    if ($configuredVenv) {
+        $env:UV_PROJECT_ENVIRONMENT = $configuredVenv
+    } else {
+        $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:LOCALAPPDATA "sistemaeducativo\backend\.venv"
+    }
+}
 $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 $composeStarted = $false
 

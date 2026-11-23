@@ -1,14 +1,19 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from app.core.validation import StrictFlag
 from app.modules.enrollments.models.entities import EstadoInscripcion, OrigenHabilitacion
 from app.modules.parallel.schemas.courses import CoursePublic
 
 
-class AuthorizationUpdate(BaseModel):
-    activa: bool
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthorizationUpdate(StrictInputModel):
+    activa: StrictFlag
 
 
 class AuthorizationPublic(BaseModel):
@@ -22,7 +27,7 @@ class AuthorizationPublic(BaseModel):
     fecha_autorizacion: datetime | None
 
 
-class EnrollmentCreate(BaseModel):
+class EnrollmentCreate(StrictInputModel):
     curso_id: uuid.UUID
 
 

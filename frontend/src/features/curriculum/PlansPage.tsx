@@ -6,6 +6,7 @@ import type { Career, PlanModality, PlanState, PlanSubject, PlanUnit, StudentPla
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
+import { codeSchema, labelSchema, messageOf, positiveIntSchema } from "../shared/validation"
 import { CurriculumShell } from "./CurriculumShell"
 import "./plans.css"
 
@@ -646,6 +647,7 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
   const [careerId, setCareerId] = useState(careers[0]?.id ?? "")
   const [code, setCode] = useState("")
   const [modality, setModality] = useState<PlanModality>("SEMESTRAL")
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
 
   if (careers.length === 0) {
     return (
@@ -661,6 +663,12 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const nextErrors = {
+      carrera_id: careerId ? null : "Selecciona una carrera.",
+      codigo: messageOf(codeSchema, code),
+    }
+    setErrors(nextErrors)
+    if (Object.values(nextErrors).some(Boolean)) return
     onSubmit({ carrera_id: careerId, codigo: code.trim().toUpperCase(), modalidad: modality })
   }
 
@@ -668,13 +676,13 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
     <Modal title="Nuevo plan de estudio" description="Se crea como borrador: podrás armar su malla antes de publicarlo. Todos los campos son obligatorios." onClose={onClose} locked={busy}>
       <form onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="plan-career" label="Carrera">
-          <select id="plan-career" className="ui-select" value={careerId} onChange={(event) => setCareerId(event.target.value)} required data-autofocus="">
+        <Field id="plan-career" label="Carrera" error={errors.carrera_id}>
+          <select id="plan-career" className="ui-select" value={careerId} onChange={(event) => { setCareerId(event.target.value); setErrors((current) => ({ ...current, carrera_id: null })) }} required aria-invalid={Boolean(errors.carrera_id)} aria-describedby={errors.carrera_id ? "plan-career-error" : undefined} data-autofocus="">
             {careers.map((career) => <option key={career.id} value={career.id}>{career.codigo} — {career.nombre}{career.activo ? "" : " (inactiva)"}</option>)}
           </select>
         </Field>
-        <Field id="plan-code" label="Código del plan" hint="Ejemplo: SIS-2026. Se guarda en mayúsculas.">
-          <input id="plan-code" className="ui-input" value={code} onChange={(event) => setCode(event.target.value)} maxLength={32} required autoComplete="off" aria-describedby="plan-code-hint" />
+        <Field id="plan-code" label="Código del plan" hint="Ejemplo: SIS-2026. Se guarda en mayúsculas." error={errors.codigo}>
+          <input id="plan-code" className="ui-input" value={code} onChange={(event) => { setCode(event.target.value); setErrors((current) => ({ ...current, codigo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.codigo)} aria-describedby={errors.codigo ? "plan-code-error plan-code-hint" : "plan-code-hint"} />
         </Field>
         <fieldset className="ui-fieldset">
           <legend>Modalidad</legend>
@@ -694,12 +702,13 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
 
 function EditPlanDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; onSubmit: (code: string) => void }) {
   const [code, setCode] = useState(plan.codigo)
+  const [codeError, setCodeError] = useState<string | null>(null)
   return (
     <Modal title="Editar código del plan" description="El código solo se puede cambiar mientras el plan está en borrador." onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); onSubmit(code.trim().toUpperCase()) }}>
+      <form onSubmit={(event) => { event.preventDefault(); const invalid = messageOf(codeSchema, code); setCodeError(invalid); if (invalid) return; onSubmit(code.trim().toUpperCase()) }}>
         <DialogError error={error} />
-        <Field id="plan-edit-code" label="Código del plan">
-          <input id="plan-edit-code" className="ui-input" value={code} onChange={(event) => setCode(event.target.value)} maxLength={32} required autoComplete="off" data-autofocus="" />
+        <Field id="plan-edit-code" label="Código del plan" error={codeError}>
+          <input id="plan-edit-code" className="ui-input" value={code} onChange={(event) => { setCode(event.target.value); setCodeError(null) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(codeError)} aria-describedby={codeError ? "plan-edit-code-error" : undefined} data-autofocus="" />
         </Field>
         <FormActions busy={busy} onClose={onClose} submitLabel="Guardar cambios" icon="check" />
       </form>
@@ -741,17 +750,27 @@ function PlanStateDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & 
 function UnitDialog({ mode, initialNumber, initialName, busy, error, onClose, onSubmit }: DialogBase & { mode: "add" | "edit"; initialNumber: number; initialName: string; onSubmit: (data: { numero: number; nombre: string }) => void }) {
   const [number, setNumber] = useState(String(initialNumber))
   const [name, setName] = useState(initialName)
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
   return (
     <Modal title={mode === "add" ? "Agregar semestre" : `Editar semestre ${initialNumber}`} description={mode === "add" ? "Todos los campos son obligatorios." : "Solo se puede cambiar el nombre; el número identifica al semestre."} onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); onSubmit({ numero: Number(number), nombre: name.trim() }) }}>
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        const nextErrors = {
+          numero: mode === "add" ? messageOf(positiveIntSchema, Number(number)) : null,
+          nombre: messageOf(labelSchema, name),
+        }
+        setErrors(nextErrors)
+        if (Object.values(nextErrors).some(Boolean)) return
+        onSubmit({ numero: Number(number), nombre: name.trim() })
+      }}>
         <DialogError error={error} />
         {mode === "add" && (
-          <Field id="unit-number" label="Número de semestre" hint="Ya se sugiere el siguiente disponible.">
-            <input id="unit-number" className="ui-input" type="number" inputMode="numeric" min={1} value={number} onChange={(event) => setNumber(event.target.value)} required aria-describedby="unit-number-hint" />
+          <Field id="unit-number" label="Número de semestre" hint="Ya se sugiere el siguiente disponible." error={errors.numero}>
+            <input id="unit-number" className="ui-input" type="number" inputMode="numeric" min={1} value={number} onChange={(event) => { setNumber(event.target.value); setErrors((current) => ({ ...current, numero: null })) }} required aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? "unit-number-error unit-number-hint" : "unit-number-hint"} />
           </Field>
         )}
-        <Field id="unit-name" label="Nombre" hint="Ejemplo: Primer semestre.">
-          <input id="unit-name" className="ui-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required autoComplete="off" aria-describedby="unit-name-hint" data-autofocus="" />
+        <Field id="unit-name" label="Nombre" hint="Ejemplo: Primer semestre." error={errors.nombre}>
+          <input id="unit-name" className="ui-input" value={name} onChange={(event) => { setName(event.target.value); setErrors((current) => ({ ...current, nombre: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.nombre)} aria-describedby={errors.nombre ? "unit-name-error unit-name-hint" : "unit-name-hint"} data-autofocus="" />
         </Field>
         <FormActions busy={busy} onClose={onClose} submitLabel={mode === "add" ? "Agregar semestre" : "Guardar cambios"} icon="check" />
       </form>
@@ -761,6 +780,7 @@ function UnitDialog({ mode, initialNumber, initialName, busy, error, onClose, on
 
 function AddSubjectDialog({ unit, available, busy, error, onClose, onSubmit }: DialogBase & { unit: PlanUnit; available: Subject[]; onSubmit: (subjectId: string) => void }) {
   const [subjectId, setSubjectId] = useState("")
+  const [localError, setLocalError] = useState("")
   const title = `Agregar materia al semestre ${unit.numero}`
   if (available.length === 0) {
     return (
@@ -775,10 +795,10 @@ function AddSubjectDialog({ unit, available, busy, error, onClose, onSubmit }: D
   }
   return (
     <Modal title={title} description={`La materia se agregará a «${unit.nombre}». Podrás moverla después arrastrando su tarjeta.`} onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); onSubmit(subjectId) }}>
-        <DialogError error={error} />
+      <form onSubmit={(event) => { event.preventDefault(); if (!subjectId) { setLocalError("Selecciona una materia."); return } setLocalError(""); onSubmit(subjectId) }}>
+        <DialogError error={error || localError} />
         <Field id="subject-pick" label="Materia del catálogo">
-          <select id="subject-pick" className="ui-select" value={subjectId} onChange={(event) => setSubjectId(event.target.value)} required data-autofocus="">
+          <select id="subject-pick" className="ui-select" value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setLocalError("") }} required aria-invalid={Boolean(localError)} data-autofocus="">
             <option value="">Selecciona una materia</option>
             {available.map((subject) => <option key={subject.id} value={subject.id}>{subject.codigo} — {subject.nombre}{subject.activo ? "" : " (inactiva)"}</option>)}
           </select>
@@ -882,6 +902,7 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
 
 function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; students: StudentPlan[]; onSubmit: (student: StudentPlan) => void }) {
   const [studentId, setStudentId] = useState("")
+  const [localError, setLocalError] = useState("")
   const candidates = students
     .filter((student) => student.plan_estudio_id !== plan.id)
     .sort((a, b) => Number(Boolean(a.plan_estudio_id)) - Number(Boolean(b.plan_estudio_id)) || a.apellidos.localeCompare(b.apellidos, "es"))
@@ -900,11 +921,13 @@ function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }:
       <form onSubmit={(event) => {
         event.preventDefault()
         const student = candidates.find((candidate) => candidate.usuario_id === studentId)
-        if (student) onSubmit(student)
+        if (!student) { setLocalError("Selecciona un estudiante."); return }
+        setLocalError("")
+        onSubmit(student)
       }}>
-        <DialogError error={error} />
+        <DialogError error={error || localError} />
         <Field id="student-pick" label="Estudiante">
-          <select id="student-pick" className="ui-select" value={studentId} onChange={(event) => setStudentId(event.target.value)} required data-autofocus="">
+          <select id="student-pick" className="ui-select" value={studentId} onChange={(event) => { setStudentId(event.target.value); setLocalError("") }} required aria-invalid={Boolean(localError)} data-autofocus="">
             <option value="">Selecciona un estudiante</option>
             {candidates.map((student) => <option key={student.usuario_id} value={student.usuario_id}>{fullName(student)} — CI {student.ci} · {student.plan_codigo ? `Plan actual: ${student.plan_codigo}` : "Sin plan"}</option>)}
           </select>

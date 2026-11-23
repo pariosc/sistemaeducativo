@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { api, type User } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { AdminNavigation } from "../shared/AdminNavigation"
+import { messageOf, phoneSchema } from "../shared/validation"
 
 export function ProfilePage() {
   const { user } = useAuth()
@@ -10,6 +11,7 @@ export function ProfilePage() {
   const [phone, setPhone] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [phoneError, setPhoneError] = useState<string | null>(null)
 
   useEffect(() => {
     void api.readProfile().then((value) => {
@@ -22,6 +24,9 @@ export function ProfilePage() {
     event.preventDefault()
     setMessage("")
     setError("")
+    const invalid = messageOf(phoneSchema, phone)
+    setPhoneError(invalid)
+    if (invalid) return
     try {
       const updated = await api.updatePhone(phone)
       setProfile(updated)
@@ -56,9 +61,10 @@ export function ProfilePage() {
           <div className="profile-card">
             <h2>Actualizar teléfono</h2>
             <p>Los demás datos se corrigen mediante administración autorizada.</p>
-            <form className="stack-form" onSubmit={(event) => void savePhone(event)}>
+            <form className="stack-form" noValidate onSubmit={(event) => void savePhone(event)}>
               <label htmlFor="phone">Teléfono</label>
-              <input id="phone" className="form-input" value={phone} onChange={(event) => setPhone(event.target.value)} required minLength={5} maxLength={40} />
+              <input id="phone" className="form-input" value={phone} onChange={(event) => { setPhone(event.target.value); setPhoneError(null) }} required minLength={5} maxLength={40} aria-invalid={Boolean(phoneError)} aria-describedby={phoneError ? "phone-error" : undefined} />
+              {phoneError && <p id="phone-error" role="alert" className="field-error">{phoneError}</p>}
               {message && <p role="status" className="success-note">{message}</p>}
               {error && <p role="alert" className="form-alert">{error}</p>}
               <button className="primary-button" type="submit">Guardar cambios</button>

@@ -57,15 +57,12 @@ export function ReportsPage() {
           setCareers(careerData); setPlans(planData); setCourses(courseData)
           setStudents(userData.filter((item) => item.rol === "ESTUDIANTE").map((item) => ({ id: item.id, name: `${item.nombres} ${item.apellidos} · ${item.ci}` })))
           setTeachers(userData.filter((item) => item.rol === "DOCENTE"))
-          setCareerId(careerData[0]?.id ?? ""); setCourseId(courseData[0]?.id ?? "")
-          setStudentId(userData.find((item) => item.rol === "ESTUDIANTE")?.id ?? "")
-          setTeacherId(userData.find((item) => item.rol === "DOCENTE")?.id ?? "")
         } else if (role === "DOCENTE") {
           const [courseData, gradebook] = await Promise.all([api.listCourses(), api.teacherGradebook()])
-          setCourses(courseData); setCourseId(courseData[0]?.id ?? "")
+          setCourses(courseData)
           const uniqueStudents = new Map<string, { id: string; name: string }>()
           gradebook.forEach((item: GradeWorkItem) => uniqueStudents.set(item.estudiante_id, { id: item.estudiante_id, name: `${item.estudiante_nombre} · ${item.estudiante_ci}` }))
-          setStudents([...uniqueStudents.values()]); setStudentId(uniqueStudents.keys().next().value ?? "")
+          setStudents([...uniqueStudents.values()])
         }
         setError("")
       } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudieron cargar los filtros.") }
@@ -73,17 +70,27 @@ export function ReportsPage() {
     })()
   }, [role])
 
-  useEffect(() => {
-    if (matchingPlans.length && !matchingPlans.some((plan) => plan.id === planId)) setPlanId(matchingPlans[0].id)
-  }, [matchingPlans, planId])
-
   async function exportReport(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setMessage(""); setDownloading(true)
+    event.preventDefault(); setError(""); setMessage("")
     const filters: { career_id?: string; plan_id?: string; student_id?: string; course_id?: string; teacher_id?: string } = {}
-    if (selected.code === "RF33") { filters.career_id = careerId; filters.plan_id = planId }
-    if (selected.code === "RF34") filters.student_id = studentId
-    if (selected.code === "RF35" || selected.code === "RF38") filters.course_id = courseId
-    if (selected.code === "RF40" && role === "ADMINISTRADOR") filters.teacher_id = teacherId
+    if (selected.code === "RF33") {
+      if (!careerId) { setError("Selecciona una carrera."); return }
+      if (!planId) { setError("Selecciona un plan de estudio."); return }
+      filters.career_id = careerId; filters.plan_id = planId
+    }
+    if (selected.code === "RF34") {
+      if (!studentId) { setError("Selecciona un estudiante."); return }
+      filters.student_id = studentId
+    }
+    if (selected.code === "RF35" || selected.code === "RF38") {
+      if (!courseId) { setError("Selecciona un paralelo."); return }
+      filters.course_id = courseId
+    }
+    if (selected.code === "RF40" && role === "ADMINISTRADOR") {
+      if (!teacherId) { setError("Selecciona un docente."); return }
+      filters.teacher_id = teacherId
+    }
+    setDownloading(true)
     try { await api.exportReport(selected.code, format, filters); setMessage("Reporte generado y descargado.") }
     catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo generar el reporte.") }
     finally { setDownloading(false) }
@@ -97,8 +104,8 @@ export function ReportsPage() {
     <section className="content-wrap"><span className="eyebrow">CONSULTA ACADÉMICA</span><h1>Reportes</h1>
       <p className="section-intro">Genera y descarga reportes PDF o Excel con los datos disponibles para tu rol.</p>
       {error && <p role="alert" className="form-alert">{error}</p>}{message && <p role="status" className="success-note">{message}</p>}
-      {loading ? <p>Cargando filtros…</p> : <section className="profile-card"><form className="stack-form" onSubmit={(event) => void exportReport(event)}>
-        <label>Reporte<select className="form-input" value={selected.code} onChange={(event) => setCode(event.target.value as ReportCode)}>{available.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.label}</option>)}</select></label>
+      {loading ? <p role="status">Cargando filtros…</p> : <section className="profile-card"><form className="stack-form" noValidate onSubmit={(event) => void exportReport(event)}>
+        <label>Reporte<select className="form-input" value={selected.code} onChange={(event) => { setCode(event.target.value as ReportCode); setCareerId(""); setPlanId(""); setStudentId(""); setCourseId(""); setTeacherId(""); setError(""); setMessage("") }}>{available.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.label}</option>)}</select></label>
         {selected.code === "RF33" && <>
           <label>Carrera<select className="form-input" value={careerId} onChange={(event) => { setCareerId(event.target.value); setPlanId("") }} required>
             <option value="">Selecciona una carrera</option>{careers.map((career) => <option key={career.id} value={career.id}>{career.codigo} — {career.nombre}</option>)}

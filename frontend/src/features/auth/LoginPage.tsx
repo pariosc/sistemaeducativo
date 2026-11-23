@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
@@ -5,12 +6,13 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { api } from "../../api/client"
+import { identifierSchema, passwordSchema } from "../shared/validation"
 import { AuthLayout } from "./AuthLayout"
 import { useAuth } from "./AuthContext"
 
 const schema = z.object({
-  identificador: z.string().trim().min(1, "Ingresa tu correo o CI."),
-  contrasena: z.string().min(1, "Ingresa tu contraseña."),
+  identificador: identifierSchema,
+  contrasena: passwordSchema,
 })
 
 type FormValues = z.infer<typeof schema>
@@ -18,6 +20,14 @@ type FormValues = z.infer<typeof schema>
 export function LoginPage() {
   const navigate = useNavigate()
   const { refresh } = useAuth()
+  const [flash, setFlash] = useState("")
+  useEffect(() => {
+    const pending = window.sessionStorage.getItem("academico_flash")
+    if (pending) {
+      setFlash(pending)
+      window.sessionStorage.removeItem("academico_flash")
+    }
+  }, [])
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { identificador: "", contrasena: "" },
@@ -32,12 +42,14 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
-      <form className="auth-form" onSubmit={form.handleSubmit((values) => login.mutate(values))}>
+      <form className="auth-form" noValidate onSubmit={form.handleSubmit((values) => login.mutate(values))}>
         <div className="form-heading">
           <span className="eyebrow">BIENVENIDO</span>
           <h2>Inicia sesión</h2>
           <p>Ingresa con el correo o CI registrado en tu cuenta.</p>
         </div>
+
+        {flash && <p role="status" className="success-note">{flash}</p>}
 
         <label className="field-label" htmlFor="identificador">Correo electrónico o CI</label>
         <input
@@ -46,6 +58,7 @@ export function LoginPage() {
           autoFocus
           className="form-input"
           placeholder="correo@institucion.edu.bo o CI"
+          maxLength={254}
           aria-invalid={Boolean(form.formState.errors.identificador)}
           aria-describedby={form.formState.errors.identificador ? "identifier-error" : undefined}
           {...form.register("identificador")}
@@ -59,6 +72,7 @@ export function LoginPage() {
           autoComplete="current-password"
           className="form-input"
           placeholder="Tu contraseña"
+          maxLength={128}
           aria-invalid={Boolean(form.formState.errors.contrasena)}
           aria-describedby={form.formState.errors.contrasena ? "password-error" : undefined}
           {...form.register("contrasena")}

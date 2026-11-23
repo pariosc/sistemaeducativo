@@ -298,3 +298,11 @@ uv run ruff check app migrations
   inicial permanece fuera de Git. Ruff y la compilación de sintaxis Python
   aprobaron; `make -n setup principal dev` revisó los objetivos. No se ejecutó
   el arranque completo ni pruebas funcionales de esta mejora.
+- **Validación, usabilidad y tema visual (22-11-2026):** se reforzaron los
+  esquemas de entrada del backend y los formularios del frontend con reglas
+  compartidas, mensajes claros y errores HTTP normalizados. Se añadió
+  alternancia claro/oscuro con etiqueta de acción e iconos sol/luna, con
+  persistencia, y confirmaciones para acciones sensibles. No se cambiaron
+  reglas académicas ni permisos. Ruff, 18 pruebas,
+  typecheck y build frontend aprobaron; API, frontend y PostgreSQL respondieron
+  en local. Detalles en `CAMBIOS_PARA_INFORME.md`.

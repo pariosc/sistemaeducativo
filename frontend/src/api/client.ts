@@ -147,6 +147,45 @@ export interface DashboardData {
   notificaciones_pendientes: number
 }
 
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
+
+function messageFromDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const issue = detail[0] as { msg?: unknown; loc?: unknown }
+    if (typeof issue?.msg === "string") {
+      const location = Array.isArray(issue.loc) ? String(issue.loc.at(-1) ?? "") : ""
+      return location ? `${location}: ${issue.msg}` : issue.msg
+    }
+  }
+  return fallback
+}
+
+function messageFromResponse(status: number, detail: unknown, fallback: string): string {
+  if (status === 401) return "Tu sesión expiró o las credenciales no son válidas. Vuelve a ingresar."
+  if (status === 403) return "No tienes permisos para realizar esta acción."
+  if (status === 409) return messageFromDetail(detail, "El registro ya existe o no permite esta operación.")
+  if (status === 422) return messageFromDetail(detail, "Revisa los datos enviados.")
+  return messageFromDetail(detail, fallback)
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+  const body = await response.json().catch(() => null)
+  return messageFromResponse(
+    response.status,
+    (body as { detail?: unknown } | null)?.detail,
+    fallback,
+  )
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -156,16 +195,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   })
-  if (!response.ok) {
-    let message = "No se pudo completar la solicitud."
-    try {
-      const body = (await response.json()) as { detail?: string }
-      message = body.detail ?? message
-    } catch {
-      // Keep the generic message for non-JSON errors.
-    }
-    throw new Error(message)
-  }
+  if (!response.ok) throw new ApiError(response.status, await readError(response, "No se pudo completar la solicitud."))
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
@@ -294,9 +324,7 @@ export const api = {
     const query = new URLSearchParams({ format, ...filters })
     const response = await fetch(`/api/v1/reports/${code}/export?${query.toString()}`, { credentials: "include" })
     if (!response.ok) {
-      let message = "No se pudo generar el reporte."
-      try { message = ((await response.json()) as { detail?: string }).detail ?? message } catch { /* respuesta no JSON */ }
-      throw new Error(message)
+      throw new ApiError(response.status, await readError(response, "No se pudo generar el reporte."))
     }
     const blob = await response.blob()
     const url = URL.createObjectURL(blob)

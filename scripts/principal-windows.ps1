@@ -3,6 +3,16 @@ param()
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$env:Path = "$([Environment]::GetEnvironmentVariable('Path', 'Machine'));$([Environment]::GetEnvironmentVariable('Path', 'User'))"
+$env:UV_LINK_MODE = "copy"
+if (-not $env:UV_PROJECT_ENVIRONMENT) {
+    $configuredVenv = [Environment]::GetEnvironmentVariable("UV_PROJECT_ENVIRONMENT", "User")
+    if ($configuredVenv) {
+        $env:UV_PROJECT_ENVIRONMENT = $configuredVenv
+    } else {
+        $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:LOCALAPPDATA "sistemaeducativo\backend\.venv"
+    }
+}
 if (-not (Test-Path (Join-Path $root ".env"))) { throw "Falta .env. Ejecuta primero scripts/setup-windows.ps1." }
 
 Push-Location $root

@@ -1,52 +1,77 @@
 import argparse
 from getpass import getpass
+from importlib import import_module
 
-from email_validator import EmailNotValidError, validate_email
+from pydantic import ValidationError
+from sqlalchemy.orm import configure_mappers
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.modules.access.repositories.user_repository import UserRepository
+from app.modules.access.schemas.user import InitialAdminInput
 from app.modules.access.services.access_service import create_initial_principal
 
 
+def _validation_message(exc: ValidationError) -> str:
+    return exc.errors()[0]["msg"].removeprefix("Value error, ")
+
+
 def create_principal() -> int:
+    import_module("app.modules.curriculum.models.entities")
+    configure_mappers()
     print("Configuración inicial del administrador principal")
     if settings.initial_admin_password:
-        ci = settings.initial_admin_ci.strip()
-        nombres = settings.initial_admin_nombres.strip()
-        apellidos = settings.initial_admin_apellidos.strip()
-        correo = settings.initial_admin_correo.strip()
-        telefono = settings.initial_admin_telefono.strip()
+        ci = settings.initial_admin_ci
+        nombres = settings.initial_admin_nombres
+        apellidos = settings.initial_admin_apellidos
+        correo = settings.initial_admin_correo
+        telefono = settings.initial_admin_telefono
         password = settings.initial_admin_password
         confirmation = password
-        print(f"Cuenta configurada desde .env: {ci}")
+        print(f"Cuenta configurada desde .env: {ci.strip().upper()}")
     else:
         print("Configura INITIAL_ADMIN_PASSWORD en .env o ingresa los datos manualmente.")
-        ci = input("CI: ").strip()
-        nombres = input("Nombres: ").strip()
-        apellidos = input("Apellidos: ").strip()
-        correo = input("Correo: ").strip()
-        telefono = input("Teléfono: ").strip()
+        ci = input("CI: ")
+        nombres = input("Nombres: ")
+        apellidos = input("Apellidos: ")
+        correo = input("Correo: ")
+        telefono = input("Teléfono: ")
         password = getpass("Contraseña (8–128 caracteres): ")
         confirmation = getpass("Confirmar contraseña: ")
 
-    if not ci or not nombres or not apellidos or not telefono:
-        print("Todos los campos son obligatorios.")
-        return 2
-    try:
-        correo = validate_email(correo, check_deliverability=False).normalized
-    except EmailNotValidError as exc:
-        print(f"Correo inválido: {exc}")
-        return 2
-    if not 8 <= len(password) <= 128:
-        print("La contraseña debe tener entre 8 y 128 caracteres.")
-        return 2
     if password != confirmation:
         print("Las contraseñas no coinciden.")
         return 2
 
+    try:
+        data = InitialAdminInput.model_validate(
+            {
+                "ci": ci,
+                "nombres": nombres,
+                "apellidos": apellidos,
+                "correo": correo,
+                "telefono": telefono,
+                "contrasena": password,
+            }
+        )
+    except ValidationError as exc:
+        print(f"Datos del administrador inválidos: {_validation_message(exc)}")
+        return 2
+
     with SessionLocal() as db:
+        if UserRepository(db).has_principal():
+            print("Ya existe un administrador principal; no se creó otra cuenta.")
+            return 0
         try:
-            user = create_initial_principal(db, ci, nombres, apellidos, correo, telefono, password)
+            user = create_initial_principal(
+                db,
+                data.ci,
+                data.nombres,
+                data.apellidos,
+                data.correo,
+                data.telefono,
+                data.contrasena,
+            )
         except ValueError as exc:
             print(str(exc))
             return 2

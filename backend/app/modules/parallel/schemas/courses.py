@@ -1,29 +1,38 @@
 import uuid
 from datetime import date, time
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.core.validation import (
+    Code,
+    PositiveInt,
+    StrictFlag,
+    descriptive_text,
+    ensure_date_order,
+    ensure_time_order,
+)
 from app.modules.curriculum.models.entities import EstadoPlan
 from app.modules.parallel.models.entities import DiaSemana, TipoExcepcionHorario
 
-ParallelCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
-Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
+ParallelCode = Code
+Description = descriptive_text(160)
+AulaText = descriptive_text(120)
+ReasonText = descriptive_text(240)
 
 
-class CourseScheduleInput(BaseModel):
+class StrictInputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class CourseScheduleInput(StrictInputModel):
     dia_semana: DiaSemana
     hora_inicio: time
     hora_fin: time
-    aula: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-        | None
-    ) = None
+    aula: AulaText | None = None
 
     @model_validator(mode="after")
     def valid_time_range(self):
-        if self.hora_fin <= self.hora_inicio:
-            raise ValueError("La hora final debe ser posterior a la hora inicial")
+        ensure_time_order(self.hora_inicio, self.hora_fin)
         return self
 
 
@@ -35,29 +44,28 @@ class CourseSchedulePublic(BaseModel):
     aula: str | None
 
 
-class CourseCreate(BaseModel):
+class CourseCreate(StrictInputModel):
     materia_plan_id: uuid.UUID
     periodo_id: uuid.UUID
     paralelo: ParallelCode
-    cupo: Annotated[int, Field(gt=0)]
+    cupo: PositiveInt
     fecha_inicio: date
     fecha_fin: date
     docente_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def valid_date_range(self):
-        if self.fecha_fin < self.fecha_inicio:
-            raise ValueError("La fecha final no puede ser anterior a la fecha inicial")
+        ensure_date_order(self.fecha_inicio, self.fecha_fin)
         return self
 
 
-class CourseUpdate(BaseModel):
+class CourseUpdate(StrictInputModel):
     paralelo: ParallelCode | None = None
-    cupo: Annotated[int, Field(gt=0)] | None = None
+    cupo: PositiveInt | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     docente_id: uuid.UUID | None = None
-    activo: bool | None = None
+    activo: StrictFlag | None = None
 
     @model_validator(mode="after")
     def has_updates(self):
@@ -66,6 +74,10 @@ class CourseUpdate(BaseModel):
             raise ValueError("Envía al menos un campo")
         if any(value is None for key, value in changes.items() if key != "docente_id"):
             raise ValueError("Los campos enviados no pueden ser null")
+        start = changes.get("fecha_inicio", self.fecha_inicio)
+        end = changes.get("fecha_fin", self.fecha_fin)
+        if start is not None and end is not None:
+            ensure_date_order(start, end)
         return self
 
 
@@ -89,15 +101,25 @@ class CoursePublic(BaseModel):
     horarios: list[CourseSchedulePublic]
 
 
-class CourseScheduleUpdate(BaseModel):
+class CourseScheduleUpdate(StrictInputModel):
     horarios: list[CourseScheduleInput]
 
+    @model_validator(mode="after")
+    def reject_duplicate_schedules(self):
+        seen: set[tuple[DiaSemana, time, time]] = set()
+        for horario in self.horarios:
+            key = (horario.dia_semana, horario.hora_inicio, horario.hora_fin)
+            if key in seen:
+                raise ValueError("No se pueden repetir franjas horarias idénticas")
+            seen.add(key)
+        return self
 
-class RegistrationUpdate(BaseModel):
-    inscripcion_abierta: bool
+
+class RegistrationUpdate(StrictInputModel):
+    inscripcion_abierta: StrictFlag
 
 
-class HolidayCreate(BaseModel):
+class HolidayCreate(StrictInputModel):
     fecha: date
     descripcion: Description
 
@@ -111,20 +133,14 @@ class HolidayPublic(BaseModel):
     descripcion: str
 
 
-class ScheduleExceptionCreate(BaseModel):
+class ScheduleExceptionCreate(StrictInputModel):
     fecha_original: date
     tipo: TipoExcepcionHorario
     fecha_reprogramada: date | None = None
     hora_inicio: time | None = None
     hora_fin: time | None = None
-    aula: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-        | None
-    ) = None
-    motivo: (
-        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
-        | None
-    ) = None
+    aula: AulaText | None = None
+    motivo: ReasonText | None = None
 
     @model_validator(mode="after")
     def validate_exception_fields(self):
@@ -137,8 +153,7 @@ class ScheduleExceptionCreate(BaseModel):
         else:
             if self.fecha_reprogramada is None or self.hora_inicio is None or self.hora_fin is None:
                 raise ValueError("La reprogramación requiere fecha y horas nuevas")
-            if self.hora_fin <= self.hora_inicio:
-                raise ValueError("La hora final debe ser posterior a la hora inicial")
+            ensure_time_order(self.hora_inicio, self.hora_fin)
         return self
 
 
