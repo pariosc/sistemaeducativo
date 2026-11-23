@@ -1,0 +1,107 @@
+/* =========================================
+   VARIABLES BASE (MODO CLARO POR DEFECTO)
+   ========================================= */
+:root {
+  --bg-main: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-hover: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: #e2e8f0;
+
+  /* Colores de acento (Modo Claro) */
+  --accent-primary: #2563eb;
+  --accent-secondary: #7c3aed;
+  --accent-success: #16a34a;
+  --accent-warning: #d97706;
+  --accent-danger: #dc2626;
+  --glow-primary: none;
+}
+
+/* =========================================
+   MODO OSCURO (CON COLORES RESALTADOS)
+   Funciona con clase .dark o data-theme="dark"
+   ========================================= */
+html.dark,
+[data-theme="dark"] {
+  --bg-main: #0b1120;        /* Fondo principal oscuro profundo */
+  --bg-surface: #151e32;     /* Tarjetas, sidebar, navbar */
+  --bg-hover: #1e293b;       /* Hover en elementos */
+  --text-primary: #f8fafc;   /* Texto principal nítido */
+  --text-secondary: #94a3b8; /* Texto secundario suave */
+  --border-color: #26334d;   /* Bordes sutiles */
+
+  /* Colores vibrantes que resaltan sobre fondo oscuro */
+  --accent-primary: #38bdf8;   /* Azul cian brillante */
+  --accent-secondary: #a78bfa; /* Violeta luminoso */
+  --accent-success: #4ade80;   /* Verde esmeralda neón */
+  --accent-warning: #fbbf24;   /* Ámbar brillante */
+  --accent-danger: #fb7185;    /* Rojo coral vibrante */
+
+  /* Brillo sutil para resaltar elementos activos */
+  --glow-primary: 0 0 12px rgba(56, 189, 248, 0.35);
+}
+
+/* =========================================
+   APLICACIÓN GLOBAL A TODA LA PÁGINA
+   ========================================= */
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Tarjetas, paneles, sidebar y tablas */
+.card,
+.panel,
+.sidebar,
+header,
+table {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Inputs y formularios */
+input,
+select,
+textarea {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--glow-primary);
+}
+
+/* Botones principales y enlaces destacados */
+button.primary,
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: #0b1120; /* Texto oscuro para máximo contraste en modo oscuro */
+  font-weight: 600;
+  border: none;
+  box-shadow: var(--glow-primary);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+button.primary:hover,
+.btn-primary:hover {
+  filter: brightness(1.1);
+}
+
+a {
+  color: var(--accent-primary);
+}
+
+/* Realce sutil de imágenes e íconos en modo oscuro */
+html.dark img,
+[data-theme="dark"] img {
+  filter: brightness(0.95) contrast(1.05);
+}

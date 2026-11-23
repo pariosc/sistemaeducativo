@@ -1,0 +1,62 @@
+/* =====================================================================
+   BARRA LATERAL (todas las pantallas autenticadas y los tres roles).
+   Fondo azul marino; el enlace activo en azul de marca con texto blanco.
+   Contrastes verificados WCAG 2.2 AA (mínimo 6,44:1; foco 8,46:1).
+   El prefijo "body .dashboard-page:has(.admin-sidebar)" sube la especificidad para
+   imponerse a styles.css, que se carga después de los componentes.
+   ===================================================================== */
+
+body .dashboard-page:has(.admin-sidebar) .topbar {
+  position: fixed; z-index: 5; inset: 0 auto 0 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  width: 264px; height: 100vh; min-height: 0; gap: 0; padding: 0; overflow: hidden;
+  border: 0; background: #101c3a; box-shadow: 2px 0 14px rgb(16 28 58 / 18%);
+}
+/* La marca ahora vive dentro de la barra: se oculta la de cada página para no duplicarla. */
+body .dashboard-page:has(.admin-sidebar) .topbar > .small-brand { display: none; }
+
+.ui-sb { display: flex; flex: 1; flex-direction: column; width: 100%; min-height: 0; }
+.ui-sb-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 22px 18px 12px; }
+.ui-sb-brand { display: flex; align-items: center; gap: 12px; min-width: 0; color: #fff; text-decoration: none; }
+.ui-sb-logo { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #3b6fe8, #2857c5); color: #fff; font-size: 16px; font-weight: 800; letter-spacing: -.02em; box-shadow: 0 2px 8px rgb(40 87 197 / 45%); }
+.ui-sb-brand-text { display: grid; min-width: 0; line-height: 1.2; }
+.ui-sb-brand-text strong { font-size: 15px; font-weight: 750; letter-spacing: -.01em; color: #fff; }
+.ui-sb-brand-text small { color: #9fb0d6; font-size: 12px; font-weight: 600; }
+
+.ui-sb-panel { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ui-sb .ui-sb-nav { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: stretch; flex: 1; flex-wrap: nowrap; align-content: start; gap: 4px; min-height: 0; padding: 6px 12px 12px; overflow-y: auto; overscroll-behavior: contain; }
+.ui-sb-group ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.ui-sb-group-title { margin: 14px 10px 6px; color: #9fb0d6; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ui-sb-link { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 9px 12px; border-radius: 10px; color: #d5ddf0; font-size: 14px; font-weight: 600; line-height: 1.25; text-decoration: none; transition: background-color .15s; }
+.ui-sb-link .ui-icon { opacity: .85; }
+.ui-sb-link:hover { background: #1b2c55; color: #fff; }
+.ui-sb-link[aria-current="page"] { background: #2857c5; color: #fff; font-weight: 750; box-shadow: 0 2px 10px rgb(40 87 197 / 40%); }
+.ui-sb-link[aria-current="page"] .ui-icon { opacity: 1; }
+
+.ui-sb-footer { flex: none; display: grid; gap: 10px; padding: 14px 12px 16px; border-top: 1px solid #25376a; }
+.ui-sb-user { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 10px 12px; border-radius: 12px; background: #172750; }
+.ui-sb-avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #2857c5; color: #fff; font-size: 13px; font-weight: 800; }
+.ui-sb-user-text { display: grid; min-width: 0; line-height: 1.25; }
+.ui-sb-user-text strong { overflow: hidden; color: #fff; font-size: 13.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.ui-sb-user-text small { color: #a9b8dc; font-size: 12px; }
+.ui-sb-logout { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid #3a4c7d; border-radius: 10px; background: transparent; color: #e6ecfb; font-size: 14px; font-weight: 650; text-align: left; cursor: pointer; transition: background-color .15s; }
+.ui-sb-logout:hover { background: #1b2c55; border-color: #5a6fa8; color: #fff; }
+
+.ui-sb-toggle { display: none; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid #3a4c7d; border-radius: 10px; background: transparent; color: #fff; font-size: 14px; font-weight: 650; cursor: pointer; }
+
+/* "Saltar al contenido": solo visible al recibir el foco con el teclado. */
+.ui-sb-skip { position: absolute; z-index: 10; top: 8px; left: 8px; padding: 10px 14px; border-radius: 8px; background: #fff; color: #173d9b; font-size: 14px; font-weight: 700; text-decoration: underline; transform: translateY(-200%); }
+.ui-sb-skip:focus { transform: none; }
+
+.ui-sb :is(a, button):focus-visible { outline: 3px solid #9db6ff; outline-offset: 2px; }
+
+@media (max-width: 780px) {
+  body .dashboard-page:has(.admin-sidebar) .topbar { position: static; width: 100%; height: auto; overflow: visible; box-shadow: none; }
+  .ui-sb-top { padding: 14px 16px; }
+  .ui-sb-toggle { display: inline-flex; }
+  .ui-sb-panel { display: none; }
+  .ui-sb-panel[data-open] { display: flex; }
+  .ui-sb .ui-sb-nav { padding-top: 0; overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-sb-link, .ui-sb-logout { transition: none; }
+}

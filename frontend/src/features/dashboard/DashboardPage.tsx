@@ -1,20 +1,41 @@
 import { useEffect, useState } from "react"
 
-import { api, type AcademicNotification, type DashboardData } from "../../api/client"
+import { api } from "../../api/client"
+import type { AcademicNotification, DashboardData } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
-import { AdminNavigation } from "../shared/AdminNavigation"
+import { AppShell, PageLoading } from "../shared/AppShell"
+import { Icon } from "../shared/icons"
+import type { IconName } from "../shared/icons"
+import { ButtonLabel, EmptyState, Notices, StatusBadge } from "../shared/ui"
 
-const links: Record<string, { label: string; href: string }[]> = {
+type Shortcut = { label: string; href: string; icon: IconName; hint: string }
+
+// Mismos accesos y destinos por rol que antes; se añade un ícono y una frase de ayuda a cada uno.
+const links: Record<string, Shortcut[]> = {
   ADMINISTRADOR: [
-    { label: "Usuarios", href: "/admin/usuarios" }, { label: "Currículo", href: "/admin/planes" },
-    { label: "Periodos", href: "/admin/periodos" }, { label: "Paralelos", href: "/admin/paralelos" },
-    { label: "Habilitaciones", href: "/admin/habilitaciones" }, { label: "Reportes", href: "/reportes" },
+    { label: "Usuarios", href: "/admin/usuarios", icon: "users", hint: "Crea y administra las cuentas" },
+    { label: "Currículo", href: "/admin/planes", icon: "layers", hint: "Facultades, carreras, materias y planes" },
+    { label: "Periodos", href: "/admin/periodos", icon: "calendar", hint: "Planifica el semestre y su calendario" },
+    { label: "Paralelos", href: "/admin/paralelos", icon: "columns", hint: "Programa la oferta del semestre" },
+    { label: "Habilitaciones", href: "/admin/habilitaciones", icon: "shield", hint: "Autoriza a los estudiantes a inscribirse" },
+    { label: "Reportes", href: "/reportes", icon: "chart", hint: "Descarga reportes en PDF o Excel" },
   ],
-  DOCENTE: [{ label: "Calificaciones", href: "/docente/calificaciones" }, { label: "Reportes", href: "/reportes" }],
+  DOCENTE: [
+    { label: "Calificaciones", href: "/docente/calificaciones", icon: "clipboard", hint: "Registra las notas de tus paralelos" },
+    { label: "Reportes", href: "/reportes", icon: "chart", hint: "Descarga reportes en PDF o Excel" },
+  ],
   ESTUDIANTE: [
-    { label: "Oferta e inscripciones", href: "/estudiante/oferta" },
-    { label: "Mis calificaciones", href: "/estudiante/calificaciones" }, { label: "Reportes", href: "/reportes" },
+    { label: "Oferta e inscripciones", href: "/estudiante/oferta", icon: "columns", hint: "Consulta la oferta e inscríbete" },
+    { label: "Mis calificaciones", href: "/estudiante/calificaciones", icon: "award", hint: "Revisa tus notas finales" },
+    { label: "Reportes", href: "/reportes", icon: "chart", hint: "Descarga tu información en PDF o Excel" },
   ],
+}
+
+const ROLE_LABEL: Record<string, string> = { ADMINISTRADOR: "Administrador", DOCENTE: "Docente", ESTUDIANTE: "Estudiante" }
+
+function todayLabel() {
+  const text = new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 export function DashboardPage() {
@@ -38,27 +59,95 @@ export function DashboardPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo actualizar el aviso.") }
   }
 
-  if (loading) return <main className="simple-page"><p className="loading-copy">Cargando panel…</p></main>
-  return <main className="dashboard-page">
-    <header className="topbar"><a className="small-brand" href="/">GA <span>Gestión Académica</span></a><AdminNavigation /></header>
-    <section className="content-wrap"><span className="eyebrow">PANEL PRINCIPAL</span><h1>Hola, {user?.nombres}</h1>
-      <p className="section-intro">Resumen académico y actividad reciente de tu cuenta.</p>
-      {error && <p role="alert" className="form-alert">{error}</p>}
-      {data && <>
-        <div className="dashboard-metrics">{data.indicadores.map((metric) => <article className="dashboard-metric" key={metric.clave}><span>{metric.etiqueta}</span><strong>{metric.valor}</strong></article>)}</div>
-        <section className="dashboard-links" aria-label="Accesos rápidos">{links[data.rol].map((link) => <a className="dashboard-shortcut" key={link.href} href={link.href}>{link.label}<span aria-hidden="true">↗</span></a>)}</section>
-        <div className="dashboard-columns">
-          <section className="profile-card"><h2>Actividad reciente</h2>{data.actividad.length === 0 ? <p>Aún no hay actividad académica para mostrar.</p> : <ul className="activity-list">{data.actividad.map((item, index) => <li key={`${item.tipo}-${item.fecha}-${index}`}>
-            <span className="activity-dot" aria-hidden="true"/><div><p>{item.mensaje}</p><time dateTime={item.fecha}>{new Date(item.fecha).toLocaleString()}</time></div>
-          </li>)}</ul>}</section>
-          <section className="profile-card"><div className="unit-card-heading"><h2>Avisos</h2><span className="role-badge">{data.notificaciones_pendientes} sin leer</span></div>
-            {notifications.length === 0 ? <p>No tienes avisos.</p> : <ul className="notification-list">{notifications.map((notice) => <li className={notice.leida ? "notification-read" : "notification-unread"} key={notice.id}>
-              <div><strong>{notice.titulo}</strong><p>{notice.mensaje}</p><time dateTime={notice.fecha_creacion}>{new Date(notice.fecha_creacion).toLocaleString()}</time></div>
-              {!notice.leida && <button className="text-action" onClick={() => void markRead(notice.id)}>Marcar leída</button>}
-            </li>)}</ul>}
-          </section>
+  if (loading) return <AppShell><PageLoading>Cargando panel…</PageLoading></AppShell>
+
+  return (
+    <AppShell>
+      <Notices notice="" error={error} />
+      <header className="hm-hero">
+        <div>
+          <span className="hm-hero-eyebrow">PANEL PRINCIPAL</span>
+          <h1>Hola, {user?.nombres}</h1>
+          <p>Resumen académico y actividad reciente de tu cuenta.</p>
         </div>
-      </>}
-    </section>
-  </main>
+        <p className="hm-date"><Icon name="calendar" size={18} />{todayLabel()}{user ? ` · ${user.es_administrador_principal ? "Administrador principal" : ROLE_LABEL[user.rol]}` : ""}</p>
+      </header>
+
+      {data && (
+        <>
+          <section aria-labelledby="hm-metrics-title">
+            <h2 id="hm-metrics-title" className="ui-visually-hidden">Indicadores</h2>
+            <dl className="hm-metrics">
+              {data.indicadores.map((metric, index) => (
+                <div className="hm-metric" data-accent={index % 4} key={metric.clave}>
+                  <dt>{metric.etiqueta}</dt>
+                  <dd>{metric.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="hm-section" aria-labelledby="hm-links-title">
+            <h2 id="hm-links-title">Accesos rápidos</h2>
+            <ul className="hm-shortcuts">
+              {links[data.rol].map((link) => (
+                <li key={link.href}>
+                  <a className="hm-shortcut" href={link.href}>
+                    <span className="hm-shortcut-icon"><Icon name={link.icon} size={22} /></span>
+                    <span className="hm-shortcut-text"><strong>{link.label}</strong><small>{link.hint}</small></span>
+                    <Icon name="arrow" size={18} />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <div className="hm-columns hm-section">
+            <section className="ui-card hm-panel" aria-labelledby="hm-activity-title">
+              <div className="hm-panel-head"><h2 id="hm-activity-title">Actividad reciente</h2></div>
+              {data.actividad.length === 0 ? (
+                <EmptyState icon="clock" title="Aún no hay actividad">Cuando haya movimientos académicos en tu cuenta aparecerán aquí.</EmptyState>
+              ) : (
+                <ul className="hm-timeline">
+                  {data.actividad.map((item, index) => (
+                    <li key={`${item.tipo}-${item.fecha}-${index}`}>
+                      <span className="hm-dot" aria-hidden="true" />
+                      <div><p>{item.mensaje}</p><time dateTime={item.fecha}>{new Date(item.fecha).toLocaleString()}</time></div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="ui-card hm-panel" aria-labelledby="hm-notices-title">
+              <div className="hm-panel-head">
+                <h2 id="hm-notices-title">Avisos</h2>
+                <StatusBadge tone={data.notificaciones_pendientes > 0 ? "amber" : "gray"}>{data.notificaciones_pendientes} sin leer</StatusBadge>
+              </div>
+              {notifications.length === 0 ? (
+                <EmptyState icon="bell" title="No tienes avisos">Los avisos de inscripciones y cambios de horario llegarán aquí.</EmptyState>
+              ) : (
+                <ul className="hm-notices">
+                  {notifications.map((notice) => (
+                    <li className={notice.leida ? "hm-notice hm-notice--read" : "hm-notice hm-notice--unread"} key={notice.id}>
+                      <div>
+                        <strong>{!notice.leida && <span className="hm-new">Nuevo</span>}{notice.titulo}</strong>
+                        <p>{notice.mensaje}</p>
+                        <time dateTime={notice.fecha_creacion}>{new Date(notice.fecha_creacion).toLocaleString()}</time>
+                      </div>
+                      {!notice.leida && (
+                        <button type="button" className="ui-btn ui-btn-quiet" aria-label={`Marcar como leído: ${notice.titulo}`} onClick={() => void markRead(notice.id)}>
+                          <ButtonLabel icon="check">Marcar leída</ButtonLabel>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </>
+      )}
+    </AppShell>
+  )
 }
