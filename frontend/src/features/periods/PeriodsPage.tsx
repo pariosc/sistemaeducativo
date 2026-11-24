@@ -8,6 +8,7 @@ import { Modal } from "../shared/Modal"
 import { ButtonLabel, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
 import { dateSchema, descriptionSchema, labelSchema, messageOf } from "../shared/validation"
 import { PlanningShell } from "../planning/PlanningShell"
+import { PeriodPlanSetup } from "../planning/PeriodPlanSetup"
 import { PERIOD_STATE_LABEL, PERIOD_STATE_TONE, dayOfMonth, daysBetween, formatDate, formatDateWithWeekday, monthShort, periodState, plural, sortPeriods } from "../planning/dates"
 import type { Tone } from "../planning/dates"
 import { syncPeriodParam } from "../planning/usePeriodSelection"
@@ -234,6 +235,8 @@ function PeriodDetail({ period, courses, holidays, authorizations, headingRef, b
           <p className="pl-hero-sub">{formatDate(period.fecha_inicio)} – {formatDate(period.fecha_fin)} · {plural(daysBetween(period.fecha_inicio, period.fecha_fin), "día", "días")}</p>
         </div>
       </div>
+
+      <PeriodPlanSetup key={period.id} periodId={period.id} />
 
       <section className="pl-section" aria-labelledby="steps-title">
         <h2 id="steps-title">Preparación del semestre</h2>

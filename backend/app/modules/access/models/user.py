@@ -94,6 +94,9 @@ class PerfilEstudiante(Base):
     plan_estudio_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("planes_estudio.id", ondelete="RESTRICT"), nullable=True
     )
+    apertura_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("aperturas_plan.id", ondelete="RESTRICT"), nullable=True
+    )
     usuario: Mapped[Usuario] = relationship(back_populates="perfil_estudiante")
     plan_estudio: Mapped[PlanEstudio | None] = relationship(back_populates="estudiantes")
 

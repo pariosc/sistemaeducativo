@@ -54,7 +54,7 @@ export function ProfilePage() {
 
   return (
     <AppShell>
-      <PageHeader eyebrow="MI CUENTA" title="Mi perfil" description="Consulta tus datos personales y actualiza tu teléfono." />
+      <PageHeader eyebrow="MI CUENTA" title="Mi perfil" description={user.rol === "ADMINISTRADOR" ? "Consulta tus datos personales y actualiza tu teléfono." : "Consulta tus datos personales. Para corregirlos, solicita ayuda a Administración Académica."} />
       <Notices notice={message} error={error} />
 
       <div className="pf-layout">
@@ -73,20 +73,27 @@ export function ProfilePage() {
           </dl>
         </section>
 
-        <section className="ui-card pf-edit" aria-labelledby="pf-edit-title">
-          <h2 id="pf-edit-title">Actualizar teléfono</h2>
-          <p className="pf-note">Los demás datos se corrigen mediante administración autorizada.</p>
-          <form noValidate onSubmit={(event) => void savePhone(event)}>
-            <Field id="phone" label="Teléfono" hint="Entre 5 y 40 caracteres." error={phoneError}>
-              <input id="phone" className="ui-input" value={phone} onChange={(event) => { setPhone(event.target.value); setPhoneError(null) }} required minLength={5} maxLength={40} autoComplete="tel" aria-invalid={Boolean(phoneError)} aria-describedby={phoneError ? "phone-error phone-hint" : "phone-hint"} />
-            </Field>
-            <div>
-              <button className="ui-btn ui-btn-primary" type="submit" disabled={saving}>
-                {saving ? "Guardando…" : <ButtonLabel icon="check">Guardar cambios</ButtonLabel>}
-              </button>
-            </div>
-          </form>
-        </section>
+        {user.rol === "ADMINISTRADOR" ? (
+          <section className="ui-card pf-edit" aria-labelledby="pf-edit-title">
+            <h2 id="pf-edit-title">Actualizar teléfono</h2>
+            <p className="pf-note">Los demás datos se corrigen mediante administración autorizada.</p>
+            <form noValidate onSubmit={(event) => void savePhone(event)}>
+              <Field id="phone" label="Teléfono" hint="Entre 5 y 40 caracteres." error={phoneError}>
+                <input id="phone" className="ui-input" value={phone} onChange={(event) => { setPhone(event.target.value); setPhoneError(null) }} required minLength={5} maxLength={40} autoComplete="tel" aria-invalid={Boolean(phoneError)} aria-describedby={phoneError ? "phone-error phone-hint" : "phone-hint"} />
+              </Field>
+              <div>
+                <button className="ui-btn ui-btn-primary" type="submit" disabled={saving}>
+                  {saving ? "Guardando…" : <ButtonLabel icon="check">Guardar cambios</ButtonLabel>}
+                </button>
+              </div>
+            </form>
+          </section>
+        ) : (
+          <section className="ui-card pf-edit" aria-labelledby="pf-edit-title">
+            <h2 id="pf-edit-title">Datos personales de solo lectura</h2>
+            <p className="pf-note">Para corregir tu CI, nombre, apellido o teléfono, solicita el cambio a Administración Académica.</p>
+          </section>
+        )}
       </div>
     </AppShell>
   )

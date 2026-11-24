@@ -87,6 +87,14 @@ async def update_profile(
     user: Annotated[Usuario, Depends(user_with_full_access)],
     db: DbSession,
 ):
+    if user.rol != UserRole.ADMINISTRADOR:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Los datos personales de docentes y estudiantes solo pueden corregirse "
+                "desde administración"
+            ),
+        )
     user.telefono = payload.telefono
     db.commit()
     db.refresh(user)

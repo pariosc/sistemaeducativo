@@ -74,6 +74,39 @@ BORRADOR y se crea otro plan para cambios posteriores a su publicación; la
 asignación de plan a un estudiante se corrige solo mientras no existan
 inscripciones ni notas.
 
+Decisiones confirmadas para la planificación centrada en el plan: el periodo
+académico permanece como ciclo semestral común; el administrador incorpora
+explícitamente las carreras participantes y puede programar varios planes
+VIGENTES de una misma carrera. El sistema muestra las materias de cada plan,
+agrupadas por semestre curricular, para decidir cuáles se ofertan en el
+periodo. No ofertar una materia en un periodo no inactiva la materia del
+catálogo ni modifica el plan publicado. En modalidad SEMESTRAL la programación
+de las materias elegidas abarca el semestre académico; en MODULAR se distribuye
+en tramos mensuales dentro del mismo periodo. Siguen pendientes los límites
+exactos de esos tramos y la política para retirar una oferta con historial.
+
+Al preparar el siguiente periodo, la planificación debe mostrar las materias
+de los planes seleccionados junto con el avance académico de sus estudiantes:
+continuidad posible, materias reprobadas que podrían repetirse y requisitos
+pendientes. Es una ayuda para decidir la oferta, no una apertura automática de
+paralelos ni una habilitación individual. El cálculo exacto de la demanda y el
+momento en que una nota será oficial si se añade aprobación administrativa
+siguen pendientes de revisión institucional. La implementación actual cuenta
+estudiantes activos con el plan asignado y resultados de periodos terminados
+antes del inicio del periodo objetivo; muestra aptos, repetidores, bloqueados,
+aprobados y casos sin nota. Señala como sugeridas solo materias con estudiantes
+aptos que estén en su semestre nominal o puedan repetirlas.
+
+Decisión confirmada para ambas modalidades: aprobar un prerrequisito durante
+un periodo académico no habilita su materia dependiente en otro bloque de ese
+mismo periodo. Una materia reprobada tampoco se repite dentro del mismo periodo;
+podrá cursarse en uno posterior si se oferta y se cumplen las condiciones de
+inscripción. La duración prevista de una carrera deriva de los semestres de su
+plan (nueve en el ejemplo, no un valor fijo). Una misma versión del plan puede
+recibir varios grupos de ingreso en distintos periodos; cada estudiante con
+ese plan se asigna a un grupo para proyectar su semestre nominal. Publicar
+otra versión del plan es una operación distinta.
+
 ## Reglas funcionales que deben preservarse
 
 - Cada inscripción requiere una habilitación individual activa para el periodo
@@ -81,8 +114,10 @@ inscripciones ni notas.
 - El semestre ubica una materia dentro del plan, pero no bloquea cursar materias
   pendientes de semestres anteriores ni adelantar materias posteriores. La
   elegibilidad académica depende de aprobar todos los prerrequisitos con nota
-  final >= 51; la oferta debe comunicar los requisitos pendientes y no habilitar
-  la acción de inscripción hasta cumplirlos.
+  final >= 51 en un periodo académico anterior al de la inscripción; la oferta
+  debe comunicar los requisitos pendientes y no habilitar la acción de
+  inscripción hasta cumplirlos. Una materia reprobada solo puede repetirse en
+  un periodo posterior y si vuelve a ofertarse.
 - Para Fase 3, las sesiones semanales son inclusivas en las fechas del paralelo,
   excluyen feriados del periodo y consideran cancelaciones y reprogramaciones.
   Inactivar un paralelo cierra su inscripción; reactivarlo no la abre. No se
@@ -105,6 +140,11 @@ inscripciones ni notas.
   condición se aplica en servidor y solo permite cambiar la contraseña o cerrar
   sesión mientras esté activa. Registrar las consecuencias para el informe en
   `CAMBIOS_PARA_INFORME.md`.
+- Docentes y Estudiantes pueden consultar su perfil, pero no editar datos
+  personales propios. La API debe rechazar esas actualizaciones; las
+  correcciones permitidas las realiza un Administrador desde gestión de usuarios.
+  El Administrador puede actualizar su propio teléfono. El cambio de contraseña
+  sigue disponible para los tres roles.
 
 ## Fases de desarrollo
 
@@ -298,6 +338,21 @@ uv run ruff check app migrations
   inicial permanece fuera de Git. Ruff y la compilación de sintaxis Python
   aprobaron; `make -n setup principal dev` revisó los objetivos. No se ejecutó
   el arranque completo ni pruebas funcionales de esta mejora.
+- **Planificación de horarios — vista semanal y recursos (23-11-2026):** P08
+  incorpora una vista semanal conjunta filtrada por periodo. Se agrega un
+  catálogo sencillo de aulas y plantillas para Madrugada, Mañana, Tarde y Noche.
+  Al elegir una plantilla, el formulario copia sus horas al paralelo; editar la
+  plantilla no cambia horarios guardados. Inactivar recursos los conserva y
+  evita nuevas asignaciones. El backend valida cruces de aula por fecha real,
+  feriados, excepciones y solapamiento horario. Configuración:
+  `/admin/planificacion-config`. El formulario consulta la API al editar y la
+  API vuelve a validar al guardar; la comprobación previa no persiste cambios.
+  Cobertura ejecutada el 23-11-2026: 26 pruebas backend aprobaron en SQLite;
+  Ruff, TypeScript y build Vite también aprobaron. Después de corregir los 500
+  observados en la interfaz, se aplicó `0009_planificacion_recursos` en la base
+  PostgreSQL local (estaba en `0008_facultades`); la revisión quedó en `0009`,
+  y las consultas ORM listaron 4 aulas heredadas y 0 bloques. Falta ejecutar
+  la suite completa y concurrencia contra PostgreSQL.
 - **Validación, usabilidad y tema visual (22-11-2026):** se reforzaron los
   esquemas de entrada del backend y los formularios del frontend con reglas
   compartidas, mensajes claros y errores HTTP normalizados. Se añadió
@@ -306,3 +361,30 @@ uv run ruff check app migrations
   reglas académicas ni permisos. Ruff, 18 pruebas,
   typecheck y build frontend aprobaron; API, frontend y PostgreSQL respondieron
   en local. Detalles en `CAMBIOS_PARA_INFORME.md`.
+- **Planificación por carrera, plan y grupo de ingreso (23-11-2026):** se
+  añadieron relaciones explícitas de carrera y plan por periodo, grupos de
+  ingreso reutilizando la misma versión del plan, asignación de estudiantes al
+  grupo y proyección hasta el último semestre curricular. La oferta presenta
+  todas las materias del plan con demanda académica; la selección de carreras
+  se filtra por facultad. El calendario filtra por facultad, carrera, plan,
+  docente y aula y conserva el detalle del paralelo en la misma vista. La
+  inscripción exige prerrequisitos aprobados en un periodo
+  anterior; una materia reprobada espera a otro periodo. La API previsualiza
+  cruces de docente, aula y estudiantes al editar un paralelo. Migración
+  `0010_aperturas_plan` aplicada en PostgreSQL local; `alembic check` no detectó
+  cambios pendientes. Pasaron 28 pruebas en SQLite y 28 en PostgreSQL temporal,
+  Ruff y build TypeScript/Vite. Tras ajustar la sugerencia de demanda y la
+  asignación conjunta de plan y grupo, pasaron otra vez 28 pruebas SQLite y
+  las 2 pruebas de progresión en PostgreSQL temporal. Falta revisión visual
+  autenticada, prueba de concurrencia en PostgreSQL y definir visto bueno de
+  notas, tramos modulares exactos y transición de planes anteriores.
+- **Integración de `origin/main` (24-11-2026):** se avanzó de `87ec9cb` a
+  `07ce28d` conservando los cambios locales. Se resolvieron los cruces en el
+  cliente de API, perfil y usuarios; la vista nueva mantiene los datos de
+  docentes y estudiantes en solo lectura y permite corregir el teléfono desde
+  administración. Se combinaron los campos de `CoursePublic` requeridos por
+  reportes y planificación. La dependencia de filtros de reportes se volvió
+  asíncrona tras detectar una solicitud que quedaba en espera durante la
+  regresión. Pasaron 28 pruebas backend, Ruff, formato y compilación
+  TypeScript/Vite. Los cambios siguen sin commit; el stash previo a la
+  integración se conserva como respaldo.

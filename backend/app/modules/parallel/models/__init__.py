@@ -1,4 +1,6 @@
 from app.modules.parallel.models.entities import (
+    Aula,
+    BloqueHorario,
     Curso,
     DiaSemana,
     ExcepcionHorario,
@@ -8,6 +10,8 @@ from app.modules.parallel.models.entities import (
 )
 
 __all__ = [
+    "Aula",
+    "BloqueHorario",
     "Curso",
     "DiaSemana",
     "ExcepcionHorario",

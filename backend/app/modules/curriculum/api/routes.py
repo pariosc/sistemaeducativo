@@ -18,6 +18,7 @@ from app.modules.curriculum.schemas.curriculum import (
     PlanSubjectUpdate,
     PlanUpdate,
     PrerequisiteCreate,
+    StudentOpeningAssignment,
     StudentPlanAssignment,
     StudentPlanPublic,
     SubjectCreate,
@@ -28,6 +29,8 @@ from app.modules.curriculum.schemas.curriculum import (
     UnitUpdate,
 )
 from app.modules.curriculum.services import curriculum_service as service
+from app.modules.periods.schemas.planning import PlanOpeningPublic
+from app.modules.periods.services import planning_service
 
 router = APIRouter(prefix="/api/v1/admin", tags=["currículo"])
 AdminUser = Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))]
@@ -99,6 +102,11 @@ async def remove_subject(subject_id: UUID, _: AdminUser, db: DbSession):
 @router.get("/plans", response_model=list[PlanPublic])
 async def get_plans(_: AdminUser, db: DbSession):
     return service.list_plans(db)
+
+
+@router.get("/plans/{plan_id}/openings", response_model=list[PlanOpeningPublic])
+async def get_plan_openings(plan_id: UUID, _: AdminUser, db: DbSession):
+    return planning_service.list_openings(db, plan_id)
 
 
 @router.post("/plans", response_model=PlanPublic, status_code=status.HTTP_201_CREATED)
@@ -198,4 +206,13 @@ async def get_student_plan_assignments(_: AdminUser, db: DbSession):
 async def put_student_plan(
     user_id: UUID, payload: StudentPlanAssignment, _: AdminUser, db: DbSession
 ):
-    return service.assign_student_plan(db, user_id, payload.plan_estudio_id)
+    return service.assign_student_plan(
+        db, user_id, payload.plan_estudio_id, payload.apertura_plan_id
+    )
+
+
+@router.put("/students/{user_id}/opening", response_model=StudentPlanPublic)
+async def put_student_opening(
+    user_id: UUID, payload: StudentOpeningAssignment, _: AdminUser, db: DbSession
+):
+    return service.assign_student_opening(db, user_id, payload.apertura_plan_id)

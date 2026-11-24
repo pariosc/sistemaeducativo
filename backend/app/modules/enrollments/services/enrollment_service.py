@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import MetaData, Table, func, inspect, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.modules.enrollments.schemas.enrollment import (
     EnrollmentPublic,
     PrerequisitePending,
 )
+from app.modules.grades.models.entities import Calificacion
 from app.modules.notifications.models.entities import Notificacion, TipoNotificacion
 from app.modules.parallel.models.entities import Curso
 from app.modules.parallel.services.calendar import first_overlap
@@ -169,7 +170,7 @@ def student_offer(db: Session, student_id: UUID) -> list[CourseOffer]:
                 cupos_disponibles=max(course.cupo - active_count, 0),
                 inscrito=course.id in enrolled,
                 prerrequisitos_pendientes=_missing_prerequisites(
-                    db, student_id, entry.plan_id, entry.id
+                    db, student_id, entry.plan_id, entry.id, course.periodo_id
                 ),
             )
         )
@@ -194,40 +195,28 @@ def list_student_enrollments(db: Session, student_id: UUID) -> list[EnrollmentPu
     ]
 
 
-def _prerequisite_approved(db: Session, student_id: UUID, prerequisite_id: UUID) -> bool:
-    connection = db.connection()
-    inspector = inspect(connection)
-    if not inspector.has_table("calificaciones"):
-        return False
-    grade_table = Table("calificaciones", MetaData(), autoload_with=connection)
-    enrollment_fk = next(
-        (
-            column
-            for column in grade_table.c
-            if any(fk.target_fullname == "inscripciones.id" for fk in column.foreign_keys)
-        ),
-        None,
-    )
-    if enrollment_fk is None or "nota_final" not in grade_table.c:
-        raise RuntimeError("calificaciones debe referenciar inscripciones.id y definir nota_final")
-    query = (
-        select(func.max(grade_table.c.nota_final))
-        .select_from(
-            grade_table.join(Inscripcion.__table__, enrollment_fk == Inscripcion.id).join(
-                Curso.__table__, Inscripcion.curso_id == Curso.id
-            )
-        )
+def _prerequisite_approved(
+    db: Session, student_id: UUID, prerequisite_id: UUID, target_period_id: UUID
+) -> bool:
+    target = _period_or_404(db, target_period_id)
+    approved = db.scalar(
+        select(Calificacion.id)
+        .join(Inscripcion, Inscripcion.id == Calificacion.inscripcion_id)
+        .join(Curso, Curso.id == Inscripcion.curso_id)
+        .join(PeriodoAcademico, PeriodoAcademico.id == Curso.periodo_id)
         .where(
             Inscripcion.estudiante_id == student_id,
             Curso.materia_plan_id == prerequisite_id,
+            PeriodoAcademico.fecha_fin < target.fecha_inicio,
+            Calificacion.nota_final >= 51,
         )
+        .limit(1)
     )
-    grade = db.scalar(query)
-    return grade is not None and grade >= 51
+    return approved is not None
 
 
 def _missing_prerequisites(
-    db: Session, student_id: UUID, plan_id: UUID, subject_plan_id: UUID
+    db: Session, student_id: UUID, plan_id: UUID, subject_plan_id: UUID, target_period_id: UUID
 ) -> list[PrerequisitePending]:
     requirements = db.execute(
         select(MateriaPlan.id, Materia.codigo, Materia.nombre)
@@ -242,7 +231,7 @@ def _missing_prerequisites(
     return [
         PrerequisitePending(materia_plan_id=row.id, codigo=row.codigo, nombre=row.nombre)
         for row in requirements
-        if not _prerequisite_approved(db, student_id, row.id)
+        if not _prerequisite_approved(db, student_id, row.id, target_period_id)
     ]
 
 
@@ -323,6 +312,23 @@ def enroll_student(db: Session, student_id: UUID, course_id: UUID) -> Enrollment
             status_code=409,
             detail="Ya tienes una inscripción activa en esta materia para el periodo",
         )
+    failed_this_period = db.scalar(
+        select(Calificacion.id)
+        .join(Inscripcion, Inscripcion.id == Calificacion.inscripcion_id)
+        .join(Curso, Curso.id == Inscripcion.curso_id)
+        .where(
+            Inscripcion.estudiante_id == student_id,
+            Curso.materia_plan_id == course.materia_plan_id,
+            Curso.periodo_id == course.periodo_id,
+            Calificacion.nota_final < 51,
+        )
+        .limit(1)
+    )
+    if failed_this_period:
+        raise HTTPException(
+            status_code=409,
+            detail="La materia reprobada solo puede repetirse en otro semestre académico",
+        )
     requirements = db.scalars(
         select(Prerrequisito.requisito_materia_plan_id).where(
             Prerrequisito.plan_id == entry.plan_id,
@@ -332,7 +338,7 @@ def enroll_student(db: Session, student_id: UUID, course_id: UUID) -> Enrollment
     missing = [
         requirement_id
         for requirement_id in requirements
-        if not _prerequisite_approved(db, student_id, requirement_id)
+        if not _prerequisite_approved(db, student_id, requirement_id, course.periodo_id)
     ]
     if missing:
         raise HTTPException(

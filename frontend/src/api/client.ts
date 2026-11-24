@@ -84,6 +84,8 @@ export interface StudentPlan {
   plan_estudio_id: string | null
   plan_codigo: string | null
   plan_estado: PlanState | null
+  apertura_plan_id: string | null
+  apertura_periodo_denominacion: string | null
 }
 
 export interface AcademicPeriod {
@@ -93,13 +95,52 @@ export interface AcademicPeriod {
   fecha_fin: string
 }
 
+export interface PeriodPlanning {
+  periodo_id: string
+  carrera_ids: string[]
+  plan_ids: string[]
+}
+
+export interface PlanOpening {
+  id: string
+  plan_id: string
+  periodo_inicio_id: string
+  periodo_denominacion: string
+  estudiantes: number
+  semestre_proyectado: number | null
+  proyeccion: { semestre_numero: number; periodo_id: string | null; periodo_denominacion: string | null }[]
+}
+
+export interface SubjectSuggestion {
+  materia_plan_id: string
+  codigo: string
+  nombre: string
+  semestre_numero: number
+  semestre_nombre: string
+  prerrequisitos: string[]
+  paralelos: number
+  cohortes_previstas: number
+  estudiantes_previstos: number
+  aptos: number
+  repetidores: number
+  bloqueados: number
+  sin_nota: number
+  aprobados: number
+  recomendada: boolean
+}
+
+export interface PlanningRoom { codigo: string; activa: boolean }
+export type PlanningShift = "MADRUGADA" | "MANANA" | "TARDE" | "NOCHE"
+export interface ScheduleBlock { id: string; turno: PlanningShift; nombre: string; hora_inicio: string; hora_fin: string; activo: boolean }
+
 export type Weekday = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO"
 export type ScheduleExceptionType = "CANCELADA" | "REPROGRAMADA"
 export interface CourseSchedule { id: string; dia_semana: Weekday; hora_inicio: string; hora_fin: string; aula: string | null }
 export interface Course {
   id: string; materia_plan_id: string; materia_codigo: string; materia_nombre: string
-  plan_id: string; plan_codigo: string; plan_estado: PlanState
-  carrera_id: string; carrera_codigo: string; carrera_nombre: string
+  plan_id: string; carrera_id: string; facultad_id: string
+  plan_codigo: string; plan_estado: PlanState
+  carrera_codigo: string; carrera_nombre: string
   periodo_id: string; periodo_denominacion: string
   paralelo: string; cupo: number; fecha_inicio: string; fecha_fin: string
   docente_id: string | null; docente_nombre: string | null; inscripcion_abierta: boolean
@@ -256,7 +297,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(user),
     }),
-  updateUser: (id: string, data: Partial<Pick<User, "ci" | "nombres" | "apellidos" | "activo">>) =>
+  updateUser: (id: string, data: Partial<Pick<User, "ci" | "nombres" | "apellidos" | "telefono" | "activo">>) =>
     request<User>(`/api/v1/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -308,18 +349,39 @@ export const api = {
   removePrerequisite: (planId: string, subjectPlanId: string, requirementId: string) =>
     request<StudyPlan>(`/api/v1/admin/plans/${planId}/subjects/${subjectPlanId}/prerequisites/${requirementId}`, { method: "DELETE" }),
   listStudentPlanAssignments: () => request<StudentPlan[]>("/api/v1/admin/students/plan-assignments"),
-  assignStudentPlan: (studentId: string, plan_estudio_id: string) =>
-    request<StudentPlan>(`/api/v1/admin/students/${studentId}/plan`, { method: "PUT", body: JSON.stringify({ plan_estudio_id }) }),
+  assignStudentPlan: (studentId: string, plan_estudio_id: string, apertura_plan_id?: string) =>
+    request<StudentPlan>(`/api/v1/admin/students/${studentId}/plan`, { method: "PUT", body: JSON.stringify({ plan_estudio_id, ...(apertura_plan_id ? { apertura_plan_id } : {}) }) }),
+  assignStudentOpening: (studentId: string, apertura_plan_id: string) =>
+    request<StudentPlan>(`/api/v1/admin/students/${studentId}/opening`, { method: "PUT", body: JSON.stringify({ apertura_plan_id }) }),
+  listPlanOpenings: (planId: string) => request<PlanOpening[]>(`/api/v1/admin/plans/${planId}/openings`),
   listPeriods: () => request<AcademicPeriod[]>("/api/v1/admin/periods"),
   createPeriod: (data: Omit<AcademicPeriod, "id">) =>
     request<AcademicPeriod>("/api/v1/admin/periods", { method: "POST", body: JSON.stringify(data) }),
+  getPeriodPlanning: (periodId: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/planning`),
+  addPeriodCareer: (periodId: string, carrera_id: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/careers`, { method: "POST", body: JSON.stringify({ carrera_id }) }),
+  removePeriodCareer: (periodId: string, careerId: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/careers/${careerId}`, { method: "DELETE" }),
+  addPeriodPlan: (periodId: string, plan_id: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/plans`, { method: "POST", body: JSON.stringify({ plan_id }) }),
+  removePeriodPlan: (periodId: string, planId: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/plans/${planId}`, { method: "DELETE" }),
+  createPlanOpening: (periodId: string, plan_id: string) => request<PlanOpening>(`/api/v1/admin/periods/${periodId}/openings`, { method: "POST", body: JSON.stringify({ plan_id }) }),
+  listPeriodOpenings: (periodId: string, planId: string) => request<PlanOpening[]>(`/api/v1/admin/periods/${periodId}/plans/${planId}/openings`),
+  listSubjectSuggestions: (periodId: string, planId: string) => request<SubjectSuggestion[]>(`/api/v1/admin/periods/${periodId}/plans/${planId}/suggestions`),
   listCourses: () => request<Course[]>("/api/v1/courses"),
+  listPlanningRooms: () => request<PlanningRoom[]>("/api/v1/admin/planning/rooms"),
+  createPlanningRoom: (codigo: string) => request<PlanningRoom>("/api/v1/admin/planning/rooms", { method: "POST", body: JSON.stringify({ codigo }) }),
+  updatePlanningRoom: (codigo: string, activa: boolean) => request<PlanningRoom>(`/api/v1/admin/planning/rooms/${encodeURIComponent(codigo)}`, { method: "PATCH", body: JSON.stringify({ activa }) }),
+  listScheduleBlocks: () => request<ScheduleBlock[]>("/api/v1/admin/planning/schedule-blocks"),
+  createScheduleBlock: (data: Pick<ScheduleBlock, "turno" | "nombre" | "hora_inicio" | "hora_fin">) => request<ScheduleBlock>("/api/v1/admin/planning/schedule-blocks", { method: "POST", body: JSON.stringify(data) }),
+  updateScheduleBlock: (id: string, data: Partial<Pick<ScheduleBlock, "turno" | "nombre" | "hora_inicio" | "hora_fin" | "activo">>) => request<ScheduleBlock>(`/api/v1/admin/planning/schedule-blocks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   createCourse: (data: { materia_plan_id: string; periodo_id: string; paralelo: string; cupo: number; fecha_inicio: string; fecha_fin: string; docente_id?: string }) =>
     request<Course>("/api/v1/admin/courses", { method: "POST", body: JSON.stringify(data) }),
   updateCourse: (id: string, data: Partial<Pick<Course, "paralelo" | "cupo" | "fecha_inicio" | "fecha_fin" | "docente_id" | "activo">>) =>
     request<Course>(`/api/v1/admin/courses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  previewCourseUpdate: (id: string, data: Partial<Pick<Course, "paralelo" | "cupo" | "fecha_inicio" | "fecha_fin" | "docente_id">>) =>
+    request<{ valido: boolean }>(`/api/v1/admin/courses/${id}/preview`, { method: "POST", body: JSON.stringify(data) }),
   replaceCourseSchedules: (id: string, horarios: Omit<CourseSchedule, "id">[]) =>
     request<Course>(`/api/v1/admin/courses/${id}/schedules`, { method: "PUT", body: JSON.stringify({ horarios }) }),
+  validateCourseSchedules: (id: string, horarios: Omit<CourseSchedule, "id">[]) =>
+    request<{ valido: boolean }>(`/api/v1/admin/courses/${id}/schedules/validate`, { method: "POST", body: JSON.stringify({ horarios }) }),
   setCourseRegistration: (id: string, inscripcion_abierta: boolean) =>
     request<Course>(`/api/v1/admin/courses/${id}/registration`, { method: "PATCH", body: JSON.stringify({ inscripcion_abierta }) }),
   deleteCourse: (id: string) => request<void>(`/api/v1/admin/courses/${id}`, { method: "DELETE" }),

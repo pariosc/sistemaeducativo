@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import type { FormEvent, KeyboardEvent, RefObject } from "react"
+import type { FormEvent, KeyboardEvent, ReactNode, RefObject } from "react"
 
 import { api } from "../../api/client"
-import type { AcademicPeriod, Course, CourseSchedule, ScheduleException, ScheduleExceptionType, StudyPlan, User, Weekday } from "../../api/client"
+import type { AcademicPeriod, Career, Course, CourseSchedule, Faculty, PeriodPlanning, PlanOpening, PlanningRoom, ScheduleBlock, ScheduleException, ScheduleExceptionType, StudyPlan, SubjectSuggestion, User, Weekday } from "../../api/client"
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
 import { codeSchema, dateSchema, messageOf, positiveIntSchema, timeSchema } from "../shared/validation"
 import { PeriodBar } from "../planning/PeriodBar"
 import { PlanningShell } from "../planning/PlanningShell"
+import { PlanOfferPanel } from "../planning/PlanOfferPanel"
 import { WEEKDAYS, formatDate, formatDateWithWeekday, formatTime, plural } from "../planning/dates"
 import { usePeriodSelection } from "../planning/usePeriodSelection"
 
@@ -19,7 +20,7 @@ type TabId = "schedule" | "exceptions"
 type Filter = "all" | "open" | "closed" | "attention" | "inactive"
 
 type Dialog =
-  | { kind: "create" }
+  | { kind: "create"; subjectId?: string }
   | { kind: "edit" }
   | { kind: "add-schedule" }
   | { kind: "add-exception" }
@@ -57,7 +58,15 @@ export function ParallelsPage() {
   const { periods, periodId, setPeriodId, loading: periodsLoading, error: periodsError } = usePeriodSelection()
   const [courses, setCourses] = useState<Course[]>([])
   const [plans, setPlans] = useState<StudyPlan[]>([])
+  const [careers, setCareers] = useState<Career[]>([])
+  const [faculties, setFaculties] = useState<Faculty[]>([])
+  const [planning, setPlanning] = useState<PeriodPlanning | null>(null)
+  const [planId, setPlanId] = useState(() => new URLSearchParams(window.location.search).get("plan_id") ?? "")
+  const [openings, setOpenings] = useState<PlanOpening[]>([])
+  const [suggestions, setSuggestions] = useState<SubjectSuggestion[]>([])
   const [teachers, setTeachers] = useState<User[]>([])
+  const [rooms, setRooms] = useState<PlanningRoom[]>([])
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([])
   const [exceptions, setExceptions] = useState<ScheduleException[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [tab, setTab] = useState<TabId>("schedule")
@@ -68,24 +77,54 @@ export function ParallelsPage() {
   const [busy, setBusy] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null)
 
   const selectedCourse = courses.find((course) => course.id === selectedId) ?? null
 
   async function reload() {
-    const [courseData, planData, userData] = await Promise.all([api.listCourses(), api.listPlans(), api.listUsers()])
+    const [courseData, planData, userData, roomData, blockData, careerData, facultyData] = await Promise.all([api.listCourses(), api.listPlans(), api.listUsers(), api.listPlanningRooms(), api.listScheduleBlocks(), api.listCareers(), api.listFaculties()])
     setCourses(courseData)
     setPlans(planData)
+    setCareers(careerData)
+    setFaculties(facultyData)
     setTeachers(userData.filter((user) => user.rol === "DOCENTE" && user.activo))
+    setRooms(roomData)
+    setScheduleBlocks(blockData)
     setSelectedId((current) => (courseData.some((course) => course.id === current) ? current : ""))
+    if (planId && periodId && planning?.periodo_id === periodId && planning.plan_ids.includes(planId)) {
+      setSuggestions(await api.listSubjectSuggestions(periodId, planId))
+    }
   }
 
   useEffect(() => { void reload().catch((reason: Error) => setError(reason.message)).finally(() => setDataLoading(false)) }, [])
+  useEffect(() => { setSelectedId("") }, [periodId])
+  useEffect(() => {
+    if (!periodId) { setPlanning(null); setSuggestions([]); setOpenings([]); return }
+    let cancelled = false
+    void api.getPeriodPlanning(periodId).then((selection) => {
+      if (cancelled) return
+      setPlanning(selection)
+      setPlanId((current) => selection.plan_ids.includes(current) ? current : selection.plan_ids[0] ?? "")
+    }).catch((reason: Error) => { if (!cancelled) setError(reason.message) })
+    return () => { cancelled = true }
+  }, [periodId])
+  useEffect(() => {
+    if (!periodId || !planId) { setSuggestions([]); setOpenings([]); return }
+    setSuggestions([])
+    setOpenings([])
+    let cancelled = false
+    void Promise.all([api.listSubjectSuggestions(periodId, planId), api.listPeriodOpenings(periodId, planId)]).then(([rows, groups]) => {
+      if (cancelled) return
+      setSuggestions(rows)
+      setOpenings(groups)
+    }).catch((reason: Error) => { if (!cancelled) setError(reason.message) })
+    return () => { cancelled = true }
+  }, [periodId, planId])
   useEffect(() => {
     if (!selectedId) { setExceptions([]); return }
     void api.listExceptions(selectedId).then(setExceptions).catch((reason: Error) => setError(reason.message))
   }, [selectedId])
-  // Al pasar de la lista al detalle (y viceversa) el foco va al título.
-  useEffect(() => { headingRef.current?.focus() }, [selectedId])
+  useEffect(() => { if (selectedId) detailHeadingRef.current?.focus() }, [selectedId])
 
   async function run(action: () => Promise<unknown>, success: string, scope: "page" | "dialog" = "page"): Promise<boolean> {
     setBusy(true)
@@ -136,7 +175,7 @@ export function ParallelsPage() {
   function renderDialog() {
     if (!dialog) return null
     const common = { busy, error: dialogError, onClose: closeDialog }
-    if (dialog.kind === "create") return <CreateCourseDialog {...common} plans={plans} periods={periods} defaultPeriodId={periodId} courses={courses} teachers={teachers} onSubmit={(data) => void createCourse(data)} />
+    if (dialog.kind === "create") return <CreateCourseDialog {...common} plans={plans.filter((plan) => planning?.plan_ids.includes(plan.id))} periods={periods} defaultPeriodId={periodId} initialSubjectId={dialog.subjectId} courses={courses} teachers={teachers} onSubmit={(data) => void createCourse(data)} />
     if (dialog.kind === "confirm") return <ConfirmDialog {...common} title={dialog.title} message={dialog.message} confirmLabel={dialog.confirmLabel} onConfirm={dialog.onConfirm} />
     if (!selectedCourse) return null
     const course = selectedCourse
@@ -147,12 +186,12 @@ export function ParallelsPage() {
           void submitDialog(() => api.updateCourse(course.id, patch), "Datos del paralelo actualizados.")
         }} />
       case "add-schedule":
-        return <AddScheduleDialog {...common} onSubmit={(input) => void submitDialog(
+        return <AddScheduleDialog {...common} course={course} rooms={rooms.filter((room) => room.activa)} blocks={scheduleBlocks.filter((block) => block.activo)} onSubmit={(input) => void submitDialog(
           () => api.replaceCourseSchedules(course.id, [...course.horarios.map(toScheduleInput), { ...input, aula: input.aula || null }]),
           "Horario actualizado.",
         )} />
       case "add-exception":
-        return <AddExceptionDialog {...common} course={course} onSubmit={(payload) => void submitDialog(
+        return <AddExceptionDialog {...common} course={course} rooms={rooms.filter((room) => room.activa)} onSubmit={(payload) => void submitDialog(
           async () => { await api.createException(course.id, payload); await refreshExceptions(course.id) },
           "Excepción de calendario registrada.",
         )} />
@@ -187,22 +226,30 @@ export function ParallelsPage() {
   return (
     <PlanningShell current="paralelos" periodId={periodId}>
       <Notices notice={notice} error={error || periodsError} />
-      {selectedCourse && actions ? (
-        <CourseDetail course={selectedCourse} exceptions={exceptions} tab={tab} headingRef={headingRef} busy={busy} onTab={setTab} onBack={backToList} actions={actions} />
-      ) : (
         <CourseList
           periods={periods}
           periodId={periodId}
           onPeriod={setPeriodId}
           courses={courses.filter((course) => course.periodo_id === periodId).sort(courseSort)}
+          plans={plans}
+          careers={careers}
+          faculties={faculties}
+          teachers={teachers}
+          rooms={rooms}
+          planning={planning}
+          planId={planId}
+          onPlan={setPlanId}
+          openings={openings}
+          suggestions={suggestions}
           headingRef={headingRef}
           busy={busy}
           onCreate={() => openDialog({ kind: "create" })}
+          onCreateSubject={(subjectId) => openDialog({ kind: "create", subjectId })}
           onOpen={openCourse}
           onToggleRegistration={(course) => void toggleRegistration(course)}
           onToggleActive={(course) => void toggleActive(course)}
+          detail={selectedCourse && actions ? <CourseDetail course={selectedCourse} exceptions={exceptions} tab={tab} headingRef={detailHeadingRef} busy={busy} onTab={setTab} onBack={backToList} actions={actions} /> : null}
         />
-      )}
       {renderDialog()}
     </PlanningShell>
   )
@@ -217,17 +264,34 @@ interface CourseListProps {
   periodId: string
   onPeriod: (id: string) => void
   courses: Course[]
+  plans: StudyPlan[]
+  careers: Career[]
+  faculties: Faculty[]
+  teachers: User[]
+  rooms: PlanningRoom[]
+  planning: PeriodPlanning | null
+  planId: string
+  onPlan: (id: string) => void
+  openings: PlanOpening[]
+  suggestions: SubjectSuggestion[]
   headingRef: RefObject<HTMLHeadingElement | null>
   busy: boolean
   onCreate: () => void
+  onCreateSubject: (id: string) => void
   onOpen: (id: string) => void
   onToggleRegistration: (course: Course) => void
   onToggleActive: (course: Course) => void
+  detail: ReactNode
 }
 
-function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, onCreate, onOpen, onToggleRegistration, onToggleActive }: CourseListProps) {
+function CourseList({ periods, periodId, onPeriod, courses, plans, careers, faculties, teachers, rooms, planning, planId, onPlan, openings, suggestions, headingRef, busy, onCreate, onCreateSubject, onOpen, onToggleRegistration, onToggleActive, detail }: CourseListProps) {
   const [filter, setFilter] = useState<Filter>("all")
   const [query, setQuery] = useState("")
+  const [facultyFilter, setFacultyFilter] = useState("")
+  const [careerFilter, setCareerFilter] = useState("")
+  const [planFilter, setPlanFilter] = useState("")
+  const [teacherFilter, setTeacherFilter] = useState("")
+  const [roomFilter, setRoomFilter] = useState("")
 
   const counts: Record<Filter, number> = {
     all: courses.length,
@@ -243,7 +307,15 @@ function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, on
     (filter === "attention" && needsAttention(course)) ||
     (filter === "inactive" && !course.activo)
   const needle = query.trim().toLowerCase()
-  const visible = courses.filter((course) => matches(course) && (!needle || `${course.materia_codigo} ${course.materia_nombre} ${course.paralelo} ${course.docente_nombre ?? ""}`.toLowerCase().includes(needle)))
+  const visible = courses.filter((course) =>
+    matches(course) &&
+    (!facultyFilter || course.facultad_id === facultyFilter) &&
+    (!careerFilter || course.carrera_id === careerFilter) &&
+    (!planFilter || course.plan_id === planFilter) &&
+    (!teacherFilter || course.docente_id === teacherFilter) &&
+    (!roomFilter || course.horarios.some((slot) => slot.aula === roomFilter)) &&
+    (!needle || `${course.materia_codigo} ${course.materia_nombre} ${course.paralelo} ${course.docente_nombre ?? ""}`.toLowerCase().includes(needle)),
+  )
 
   return (
     <>
@@ -252,7 +324,7 @@ function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, on
         title="Oferta y paralelos"
         description="Organiza las materias que se abrirán en el semestre. En planes modulares, define las fechas de cada paralelo para ubicarlo en su bloque mensual."
         headingRef={headingRef}
-        actions={periods.length > 0 ? <button type="button" className="ui-btn ui-btn-primary" onClick={onCreate}><ButtonLabel icon="plus">Nuevo paralelo</ButtonLabel></button> : undefined}
+        actions={periods.length > 0 && planning?.plan_ids.length ? <button type="button" className="ui-btn ui-btn-primary" onClick={onCreate}><ButtonLabel icon="plus">Nuevo paralelo</ButtonLabel></button> : undefined}
       />
 
       {periods.length === 0 ? (
@@ -263,11 +335,9 @@ function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, on
         <>
           <PeriodBar periods={periods} periodId={periodId} onChange={onPeriod} />
 
-          {courses.length === 0 ? (
-            <EmptyState icon="layers" title="No hay paralelos programados para este semestre">
-              Usa «Nuevo paralelo» para crear el primero. Después agrega su horario para poder abrir inscripciones.
-            </EmptyState>
-          ) : (
+          <PlanOfferPanel planning={planning} plans={plans} planId={planId} openings={openings} suggestions={suggestions} onPlan={onPlan} onCreateSubject={onCreateSubject} />
+
+          {courses.length === 0 && <p className="ui-alert ui-alert-info">Aún no hay paralelos. Selecciona una materia del plan y programa el primero; el calendario se llenará aquí.</p>}
             <>
               <dl className="pl-tiles" aria-label="Resumen de la oferta">
                 <div><dt>Paralelos</dt><dd>{counts.all}</dd></div>
@@ -291,8 +361,29 @@ function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, on
                 )}
               </div>
 
+              <div className="pl-calendar-filters" aria-label="Ver calendario por recurso o carrera">
+                <label>Facultad<select className="ui-select" value={facultyFilter} onChange={(event) => { setFacultyFilter(event.target.value); setCareerFilter(""); setPlanFilter("") }}><option value="">Todas</option>{faculties.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></label>
+                <label>Carrera<select className="ui-select" value={careerFilter} onChange={(event) => { setCareerFilter(event.target.value); setPlanFilter("") }}><option value="">Todas</option>{careers.filter((item) => !facultyFilter || item.facultad_id === facultyFilter).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></label>
+                <label>Plan<select className="ui-select" value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}><option value="">Todos</option>{plans.filter((item) => planning?.plan_ids.includes(item.id) && (!careerFilter || item.carrera_id === careerFilter)).map((item) => <option key={item.id} value={item.id}>{item.codigo}</option>)}</select></label>
+                <label>Docente<select className="ui-select" value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)}><option value="">Todos</option>{teachers.map((item) => <option key={item.id} value={item.id}>{item.nombres} {item.apellidos}</option>)}</select></label>
+                <label>Aula<select className="ui-select" value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)}><option value="">Todas</option>{rooms.map((item) => <option key={item.codigo} value={item.codigo}>{item.codigo}</option>)}</select></label>
+              </div>
+
+              <div className="pl-workspace-layout">
+              <section className="pl-week-planner" aria-labelledby="weekly-planner-title">
+                <div className="pl-week-planner-head"><div><h2 id="weekly-planner-title">Calendario semanal de la oferta</h2><p>Vista conjunta de las franjas de todos los paralelos del semestre. Selecciona una clase para editar sus datos y horario.</p></div><span>{visible.reduce((total, course) => total + course.horarios.length, 0)} franjas</span></div>
+                <ol className="pl-week-planner-grid">
+                  {WEEKDAYS.map((day) => {
+                    const slots = visible.flatMap((course) => course.horarios.filter((slot) => slot.dia_semana === day.value).map((slot) => ({ course, slot }))).sort((a, b) => a.slot.hora_inicio.localeCompare(b.slot.hora_inicio))
+                    return <li key={day.value} className="pl-week-planner-day" data-empty={!slots.length || undefined}><h3>{day.label}</h3>{slots.length ? <ul>{slots.map(({ course, slot }) => <li key={`${course.id}-${slot.id}`}><button type="button" onClick={() => onOpen(course.id)} title={`Gestionar ${course.materia_codigo}, paralelo ${course.paralelo}`}><time>{formatTime(slot.hora_inicio)}–{formatTime(slot.hora_fin)}</time><strong>{course.materia_codigo} · {course.paralelo}</strong><span>{slot.aula || "Sin aula"}</span><small>{course.docente_nombre || "Sin docente"}</small></button></li>)}</ul> : <p>Sin clases</p>}</li>
+                  })}
+                </ol>
+              </section>
+              {detail && <aside className="pl-inline-detail" aria-label="Edición del paralelo seleccionado">{detail}</aside>}
+              </div>
+
               {visible.length === 0 ? (
-                <EmptyState icon="search" title="Ningún paralelo coincide con el filtro" />
+                courses.length > 0 && <EmptyState icon="search" title="Ningún paralelo coincide con el filtro" />
               ) : (
                 <ul className="pl-grid pl-grid--courses">
                   {visible.map((course) => (
@@ -325,7 +416,6 @@ function CourseList({ periods, periodId, onPeriod, courses, headingRef, busy, on
                 </ul>
               )}
             </>
-          )}
         </>
       )}
     </>
@@ -515,18 +605,20 @@ function ExceptionsPanel({ exceptions, busy, actions }: { exceptions: ScheduleEx
 
 interface DialogBase { busy: boolean; error: string; onClose: () => void }
 
-function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers, busy, error, onClose, onSubmit }: DialogBase & {
+function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId, courses, teachers, busy, error, onClose, onSubmit }: DialogBase & {
   plans: StudyPlan[]
   periods: AcademicPeriod[]
   defaultPeriodId: string
+  initialSubjectId?: string
   courses: Course[]
   teachers: User[]
   onSubmit: (data: Parameters<typeof api.createCourse>[0]) => void
 }) {
   const vigentPlans = plans.filter((plan) => plan.estado === "VIGENTE")
-  const firstSubject = vigentPlans.flatMap((plan) => plan.unidades.flatMap((unit) => unit.materias))[0]?.id ?? ""
+  const allowedSubjects = vigentPlans.flatMap((plan) => plan.unidades.flatMap((unit) => unit.materias))
+  const firstSubject = allowedSubjects.some((subject) => subject.id === initialSubjectId) ? initialSubjectId! : allowedSubjects[0]?.id ?? ""
   const [subjectId, setSubjectId] = useState(firstSubject)
-  const [periodId, setPeriodId] = useState(defaultPeriodId)
+  const periodId = defaultPeriodId
   const [parallel, setParallel] = useState("")
   const [parallelTouched, setParallelTouched] = useState(false)
   const [capacity, setCapacity] = useState("30")
@@ -549,10 +641,11 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
   }
 
   const period = periods.find((item) => item.id === periodId)
+  const selectedPlan = vigentPlans.find((plan) => plan.unidades.some((unit) => unit.materias.some((subject) => subject.id === subjectId)))
   // Valores sugeridos: se usan mientras la persona no los haya escrito ella misma.
   const shownParallel = parallelTouched ? parallel : nextParallelLetter(courses, subjectId, periodId)
-  const shownStart = datesTouched ? start : period?.fecha_inicio ?? ""
-  const shownEnd = datesTouched ? end : period?.fecha_fin ?? ""
+  const shownStart = datesTouched ? start : selectedPlan?.modalidad === "MODULAR" ? "" : period?.fecha_inicio ?? ""
+  const shownEnd = datesTouched ? end : selectedPlan?.modalidad === "MODULAR" ? "" : period?.fecha_fin ?? ""
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -560,7 +653,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
       paralelo: messageOf(codeSchema, shownParallel),
       cupo: messageOf(positiveIntSchema, Number(capacity)),
       fecha_inicio: messageOf(dateSchema, shownStart),
-      fecha_fin: messageOf(dateSchema, shownEnd) ?? (shownStart && shownEnd <= shownStart ? "La fecha de fin debe ser posterior a la de inicio." : null),
+      fecha_fin: messageOf(dateSchema, shownEnd) ?? (shownStart && shownEnd < shownStart ? "La fecha de fin no puede ser anterior al inicio." : null),
     }
     setErrors(nextErrors)
     if (Object.values(nextErrors).some(Boolean)) return
@@ -583,11 +676,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
             ))}
           </select>
         </Field>
-        <Field id="course-period" label="Semestre académico">
-          <select id="course-period" className="ui-select" value={periodId} onChange={(event) => setPeriodId(event.target.value)} required>
-            {periods.map((item) => <option key={item.id} value={item.id}>{item.denominacion}</option>)}
-          </select>
-        </Field>
+        <p className="pl-lead">Semestre académico: <strong>{period?.denominacion}</strong></p>
         <div className="pl-form-row">
           <Field id="course-parallel" label="Paralelo" hint="Se sugiere la siguiente letra libre." error={errors.paralelo}>
             <input id="course-parallel" className="ui-input" value={shownParallel} onChange={(event) => { setParallelTouched(true); setParallel(event.target.value.toUpperCase()); setErrors((current) => ({ ...current, paralelo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.paralelo)} aria-describedby={errors.paralelo ? "course-parallel-error course-parallel-hint" : "course-parallel-hint"} />
@@ -604,7 +693,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, courses, teachers
             <input id="course-end" className="ui-input" type="date" value={shownEnd} min={shownStart || undefined} onChange={(event) => { setDatesTouched(true); setEnd(event.target.value); if (!datesTouched) setStart(shownStart); setErrors((current) => ({ ...current, fecha_fin: null })) }} required aria-invalid={Boolean(errors.fecha_fin)} aria-describedby={errors.fecha_fin ? "course-end-error" : undefined} />
           </Field>
         </div>
-        <p className="ui-field-hint" style={{ marginTop: -8 }}>Por defecto usa las fechas del semestre. En planes modulares, ajústalas al bloque mensual del paralelo.</p>
+        <p className="ui-field-hint" style={{ marginTop: -8 }}>{selectedPlan?.modalidad === "MODULAR" ? "Indica las fechas del módulo dentro del semestre académico." : "Se sugieren las fechas completas del semestre académico."}</p>
         <Field id="course-teacher" label="Docente (opcional)" hint="Puedes asignarlo después con «Editar datos».">
           <select id="course-teacher" className="ui-select" value={teacherId} onChange={(event) => setTeacherId(event.target.value)} aria-describedby="course-teacher-hint">
             <option value="">Sin asignar</option>
@@ -624,6 +713,25 @@ function EditCourseDialog({ course, teachers, busy, error, onClose, onSubmit }: 
   const [end, setEnd] = useState(course.fecha_fin)
   const [teacherId, setTeacherId] = useState(course.docente_id ?? "")
   const [errors, setErrors] = useState<Record<string, string | null>>({})
+  const [conflictCheck, setConflictCheck] = useState("")
+  const checkSequence = useRef(0)
+
+  useEffect(() => {
+    if (!start || !end || end < start || !Number(capacity)) { setConflictCheck(""); return }
+    const sequence = ++checkSequence.current
+    setConflictCheck("Comprobando fechas, docente, aula y estudiantes inscritos…")
+    const timer = window.setTimeout(() => {
+      void api.previewCourseUpdate(course.id, {
+        paralelo: parallel.trim().toUpperCase(), cupo: Number(capacity),
+        fecha_inicio: start, fecha_fin: end, docente_id: teacherId || null,
+      }).then(() => {
+        if (sequence === checkSequence.current) setConflictCheck("Sin cruces detectados para esta configuración.")
+      }).catch((reason: Error) => {
+        if (sequence === checkSequence.current) setConflictCheck(reason.message)
+      })
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [course.id, parallel, capacity, start, end, teacherId])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -667,18 +775,35 @@ function EditCourseDialog({ course, teachers, busy, error, onClose, onSubmit }: 
             {course.docente_id && !teachers.some((teacher) => teacher.id === course.docente_id) && <option value={course.docente_id}>{course.docente_nombre} (no disponible)</option>}
           </select>
         </Field>
+        {conflictCheck && <p className="ui-field-hint" role="status">{conflictCheck}</p>}
         <FormActions busy={busy} onClose={onClose} submitLabel="Guardar cambios" icon="check" />
       </form>
     </Modal>
   )
 }
 
-function AddScheduleDialog({ busy, error, onClose, onSubmit }: DialogBase & { onSubmit: (input: ScheduleInput) => void }) {
+function AddScheduleDialog({ busy, error, onClose, course, rooms, blocks, onSubmit }: DialogBase & { course: Course; rooms: PlanningRoom[]; blocks: ScheduleBlock[]; onSubmit: (input: ScheduleInput) => void }) {
   const [day, setDay] = useState<Weekday>("LUNES")
   const [from, setFrom] = useState("08:00")
   const [to, setTo] = useState("10:00")
   const [room, setRoom] = useState("")
+  const [blockId, setBlockId] = useState("")
   const [localError, setLocalError] = useState("")
+  const [conflictCheck, setConflictCheck] = useState("")
+  const checkSequence = useRef(0)
+
+  useEffect(() => {
+    if (!from || !to || to <= from) { setConflictCheck(""); return }
+    const sequence = ++checkSequence.current
+    setConflictCheck("Comprobando disponibilidad de docente, aula e inscripciones…")
+    const timer = window.setTimeout(() => {
+      const candidate: ScheduleInput = { dia_semana: day, hora_inicio: from, hora_fin: to, aula: room || null }
+      void api.validateCourseSchedules(course.id, [...course.horarios.map(toScheduleInput), candidate])
+        .then(() => { if (sequence === checkSequence.current) setConflictCheck("Sin cruces detectados para las fechas de clase del paralelo.") })
+        .catch((reason: Error) => { if (sequence === checkSequence.current) setConflictCheck(reason.message) })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [course, day, from, to, room])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -701,22 +826,33 @@ function AddScheduleDialog({ busy, error, onClose, onSubmit }: DialogBase & { on
           <Field id="slot-from" label="Desde"><input id="slot-from" className="ui-input" type="time" value={from} onChange={(event) => setFrom(event.target.value)} required /></Field>
           <Field id="slot-to" label="Hasta"><input id="slot-to" className="ui-input" type="time" value={to} onChange={(event) => setTo(event.target.value)} required /></Field>
         </div>
-        <Field id="slot-room" label="Aula (opcional)">
-          <input id="slot-room" className="ui-input" value={room} onChange={(event) => setRoom(event.target.value)} maxLength={120} autoComplete="off" />
+        <Field id="slot-block" label="Franja de turno (opcional)" hint="Puedes ajustar las horas manualmente después de elegirla.">
+          <select id="slot-block" className="ui-select" value={blockId} onChange={(event) => { const selected = blocks.find((block) => block.id === event.target.value); setBlockId(event.target.value); if (selected) { setFrom(selected.hora_inicio.slice(0, 5)); setTo(selected.hora_fin.slice(0, 5)) } }}>
+            <option value="">Elegir horas manualmente</option>
+            {blocks.map((block) => <option key={block.id} value={block.id}>{block.turno === "MANANA" ? "Mañana" : block.turno.charAt(0) + block.turno.slice(1).toLowerCase()} · {block.nombre} ({block.hora_inicio.slice(0, 5)}–{block.hora_fin.slice(0, 5)})</option>)}
+          </select>
         </Field>
+        <Field id="slot-room" label="Aula (opcional)">
+          <select id="slot-room" className="ui-select" value={room} onChange={(event) => setRoom(event.target.value)}>
+            <option value="">Sin aula asignada</option>
+            {rooms.map((item) => <option key={item.codigo} value={item.codigo}>{item.codigo}</option>)}
+          </select>
+        </Field>
+        {conflictCheck && <p className="ui-field-hint" role="status">{conflictCheck}</p>}
         <FormActions busy={busy} onClose={onClose} submitLabel="Agregar horario" icon="plus" />
       </form>
     </Modal>
   )
 }
 
-function AddExceptionDialog({ course, busy, error, onClose, onSubmit }: DialogBase & { course: Course; onSubmit: (payload: ExceptionPayload) => void }) {
+function AddExceptionDialog({ course, busy, error, onClose, rooms, onSubmit }: DialogBase & { course: Course; rooms: PlanningRoom[]; onSubmit: (payload: ExceptionPayload) => void }) {
   const [original, setOriginal] = useState("")
   const [type, setType] = useState<ScheduleExceptionType>("CANCELADA")
   const [newDate, setNewDate] = useState("")
   const [from, setFrom] = useState("08:00")
   const [to, setTo] = useState("10:00")
   const [reason, setReason] = useState("")
+  const [room, setRoom] = useState("")
   const [localError, setLocalError] = useState("")
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -728,7 +864,7 @@ function AddExceptionDialog({ course, busy, error, onClose, onSubmit }: DialogBa
     setLocalError("")
     onSubmit(type === "CANCELADA"
       ? { fecha_original: original, tipo: type, motivo: reason.trim() || undefined }
-      : { fecha_original: original, tipo: type, fecha_reprogramada: newDate, hora_inicio: from, hora_fin: to, motivo: reason.trim() || undefined })
+      : { fecha_original: original, tipo: type, fecha_reprogramada: newDate, hora_inicio: from, hora_fin: to, aula: room || undefined, motivo: reason.trim() || undefined })
   }
 
   return (
@@ -750,6 +886,7 @@ function AddExceptionDialog({ course, busy, error, onClose, onSubmit }: DialogBa
               <Field id="exc-from" label="Desde"><input id="exc-from" className="ui-input" type="time" value={from} onChange={(event) => setFrom(event.target.value)} required /></Field>
               <Field id="exc-to" label="Hasta"><input id="exc-to" className="ui-input" type="time" value={to} onChange={(event) => setTo(event.target.value)} required /></Field>
             </div>
+            <Field id="exc-room" label="Aula para la reprogramación (opcional)"><select id="exc-room" className="ui-select" value={room} onChange={(event) => setRoom(event.target.value)}><option value="">Sin aula asignada</option>{rooms.map((item) => <option key={item.codigo} value={item.codigo}>{item.codigo}</option>)}</select></Field>
           </>
         )}
         <Field id="exc-reason" label="Motivo (opcional)">

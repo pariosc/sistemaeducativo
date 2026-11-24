@@ -1,3 +1,8 @@
-from app.modules.periods.models.entities import PeriodoAcademico
+from app.modules.periods.models.entities import (
+    AperturaPlan,
+    PeriodoAcademico,
+    PeriodoCarrera,
+    PeriodoPlan,
+)
 
-__all__ = ["PeriodoAcademico"]
+__all__ = ["AperturaPlan", "PeriodoAcademico", "PeriodoCarrera", "PeriodoPlan"]

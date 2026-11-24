@@ -59,7 +59,7 @@ export function AdminUsersPage() {
     const ok = await run(async () => { secret = (await api.createUser({ ...form, ci: form.ci.trim().toUpperCase(), correo: form.correo.trim().toLowerCase() })).contrasena_temporal }, `Cuenta creada para ${form.nombres} ${form.apellidos}.`, "dialog")
     if (ok) { closeDialog(); setTemporaryPassword(secret) }
   }
-  async function editIdentity(target: User, data: { nombres: string; apellidos: string; ci: string }) {
+  async function editIdentity(target: User, data: { nombres: string; apellidos: string; ci: string; telefono: string }) {
     if (await run(() => api.updateUser(target.id, data), `Datos de ${data.nombres} ${data.apellidos} corregidos.`, "dialog")) closeDialog()
   }
   async function resetPassword(target: User) {
@@ -142,7 +142,7 @@ export function AdminUsersPage() {
                         <span className="us-protected"><Icon name="shield" size={16} />Cuenta protegida</span>
                       ) : (
                         <div className="ui-row-actions">
-                          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" aria-label={`Corregir identidad de ${fullName(item)}`} onClick={() => openDialog({ kind: "edit", target: item })}><ButtonLabel icon="edit">Corregir identidad</ButtonLabel></button>
+                          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" aria-label={`Corregir datos de ${fullName(item)}`} onClick={() => openDialog({ kind: "edit", target: item })}><ButtonLabel icon="edit">Corregir datos</ButtonLabel></button>
                           {item.activo
                             ? <button type="button" className="ui-btn ui-btn-warning ui-btn-sm" disabled={busy} aria-label={`Inactivar a ${fullName(item)}`} onClick={() => void toggleActive(item)}><ButtonLabel icon="pause">Inactivar</ButtonLabel></button>
                             : <button type="button" className="ui-btn ui-btn-success-outline ui-btn-sm" disabled={busy} aria-label={`Activar a ${fullName(item)}`} onClick={() => void toggleActive(item)}><ButtonLabel icon="play">Activar</ButtonLabel></button>}
@@ -221,25 +221,27 @@ function CreateUserDialog({ canCreateAdmin, busy, error, onClose, onSubmit }: { 
   )
 }
 
-function EditIdentityDialog({ target, busy, error, onClose, onSubmit }: { target: User; busy: boolean; error: string; onClose: () => void; onSubmit: (data: { nombres: string; apellidos: string; ci: string }) => void }) {
+function EditIdentityDialog({ target, busy, error, onClose, onSubmit }: { target: User; busy: boolean; error: string; onClose: () => void; onSubmit: (data: { nombres: string; apellidos: string; ci: string; telefono: string }) => void }) {
   const [nombres, setNombres] = useState(target.nombres)
   const [apellidos, setApellidos] = useState(target.apellidos)
   const [ci, setCi] = useState(target.ci)
+  const [telefono, setTelefono] = useState(target.telefono)
   const [errors, setErrors] = useState<Record<string, string | null>>({})
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const next = { nombres: messageOf(personNameSchema, nombres), apellidos: messageOf(personNameSchema, apellidos), ci: messageOf(ciSchema, ci) }
+    const next = { nombres: messageOf(personNameSchema, nombres), apellidos: messageOf(personNameSchema, apellidos), ci: messageOf(ciSchema, ci), telefono: messageOf(phoneSchema, telefono) }
     setErrors(next)
     if (Object.values(next).some(Boolean)) return
-    onSubmit({ nombres: nombres.trim(), apellidos: apellidos.trim(), ci: ci.trim().toUpperCase() })
+    onSubmit({ nombres: nombres.trim(), apellidos: apellidos.trim(), ci: ci.trim().toUpperCase(), telefono: telefono.trim() })
   }
   return (
-    <Modal title={`Corregir identidad de ${fullName(target)}`} description="Usa esta opción solo para corregir errores de digitación. No cambia el correo ni el rol." onClose={onClose} locked={busy}>
+    <Modal title={`Corregir datos de ${fullName(target)}`} description="Usa esta opción solo para corregir errores de digitación. No cambia el correo ni el rol." onClose={onClose} locked={busy}>
       <form noValidate onSubmit={submit}>
         <DialogError error={error} />
         <Field id="edit-names" label="Nombres" error={errors.nombres}><input id="edit-names" className="ui-input" value={nombres} onChange={(event) => { setNombres(event.target.value); setErrors((current) => ({ ...current, nombres: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.nombres)} aria-describedby={errors.nombres ? "edit-names-error" : undefined} data-autofocus="" /></Field>
         <Field id="edit-surnames" label="Apellidos" error={errors.apellidos}><input id="edit-surnames" className="ui-input" value={apellidos} onChange={(event) => { setApellidos(event.target.value); setErrors((current) => ({ ...current, apellidos: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.apellidos)} aria-describedby={errors.apellidos ? "edit-surnames-error" : undefined} /></Field>
         <Field id="edit-ci" label="CI" error={errors.ci}><input id="edit-ci" className="ui-input" value={ci} onChange={(event) => { setCi(event.target.value); setErrors((current) => ({ ...current, ci: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.ci)} aria-describedby={errors.ci ? "edit-ci-error" : undefined} /></Field>
+        <Field id="edit-phone" label="Teléfono" error={errors.telefono}><input id="edit-phone" className="ui-input" value={telefono} onChange={(event) => { setTelefono(event.target.value); setErrors((current) => ({ ...current, telefono: null })) }} maxLength={40} required autoComplete="tel" aria-invalid={Boolean(errors.telefono)} aria-describedby={errors.telefono ? "edit-phone-error" : undefined} /></Field>
         <FormActions busy={busy} onClose={onClose} submitLabel="Guardar cambios" icon="check" />
       </form>
     </Modal>

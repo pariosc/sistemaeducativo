@@ -40,6 +40,9 @@ from app.modules.curriculum.schemas.curriculum import (
     UnitUpdate,
     UnitWithSubjects,
 )
+from app.modules.enrollments.models.entities import Inscripcion
+from app.modules.parallel.models.entities import Curso
+from app.modules.periods.models.entities import AperturaPlan, PeriodoAcademico
 
 
 def _save(db: Session, duplicate_message: str = "El código ya está registrado") -> None:
@@ -441,6 +444,24 @@ def remove_prerequisite(
     return _plan_output(db, plan)
 
 
+def _student_plan_output(
+    db: Session, profile: PerfilEstudiante, user: Usuario, plan: PlanEstudio | None
+) -> StudentPlanPublic:
+    opening = db.get(AperturaPlan, profile.apertura_plan_id) if profile.apertura_plan_id else None
+    start = db.get(PeriodoAcademico, opening.periodo_inicio_id) if opening else None
+    return StudentPlanPublic(
+        usuario_id=user.id,
+        ci=user.ci,
+        nombres=user.nombres,
+        apellidos=user.apellidos,
+        plan_estudio_id=plan.id if plan else None,
+        plan_codigo=plan.codigo if plan else None,
+        plan_estado=plan.estado if plan else None,
+        apertura_plan_id=opening.id if opening else None,
+        apertura_periodo_denominacion=start.denominacion if start else None,
+    )
+
+
 def list_student_plans(db: Session) -> list[StudentPlanPublic]:
     rows = db.execute(
         select(PerfilEstudiante, Usuario, PlanEstudio)
@@ -449,37 +470,27 @@ def list_student_plans(db: Session) -> list[StudentPlanPublic]:
         .where(Usuario.rol == UserRole.ESTUDIANTE)
         .order_by(Usuario.apellidos, Usuario.nombres)
     )
-    return [
-        StudentPlanPublic(
-            usuario_id=user.id,
-            ci=user.ci,
-            nombres=user.nombres,
-            apellidos=user.apellidos,
-            plan_estudio_id=plan.id if plan else None,
-            plan_codigo=plan.codigo if plan else None,
-            plan_estado=plan.estado if plan else None,
-        )
-        for profile, user, plan in rows
-    ]
+    return [_student_plan_output(db, profile, user, plan) for profile, user, plan in rows]
 
 
-def assign_student_plan(db: Session, user_id: UUID, plan_id: UUID) -> StudentPlanPublic:
+def assign_student_plan(
+    db: Session, user_id: UUID, plan_id: UUID, opening_id: UUID | None = None
+) -> StudentPlanPublic:
     profile = db.get(PerfilEstudiante, user_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
     plan = db.get(PlanEstudio, plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan de estudio no encontrado")
+    opening = db.get(AperturaPlan, opening_id) if opening_id else None
+    if opening_id and not opening:
+        raise HTTPException(status_code=404, detail="Grupo de inicio no encontrado")
+    if opening and opening.plan_id != plan_id:
+        raise HTTPException(status_code=409, detail="El grupo no pertenece al plan seleccionado")
     if profile.plan_estudio_id == plan_id:
-        return StudentPlanPublic(
-            usuario_id=user_id,
-            ci=profile.usuario.ci,
-            nombres=profile.usuario.nombres,
-            apellidos=profile.usuario.apellidos,
-            plan_estudio_id=plan.id,
-            plan_codigo=plan.codigo,
-            plan_estado=plan.estado,
-        )
+        if opening and profile.apertura_plan_id != opening.id:
+            return assign_student_opening(db, user_id, opening.id)
+        return _student_plan_output(db, profile, profile.usuario, plan)
     # Inscripciones se incorpora en la fase siguiente; su FK al perfil permite
     # activar la regla de corrección sin depender del nombre de su columna.
     connection = db.connection()
@@ -507,15 +518,38 @@ def assign_student_plan(db: Session, user_id: UUID, plan_id: UUID) -> StudentPla
                 detail="No se puede cambiar el plan de un estudiante con inscripciones",
             )
     profile.plan_estudio_id = plan_id
+    profile.apertura_plan_id = opening.id if opening else None
     _save(db, "No se pudo asignar el plan al estudiante")
     db.refresh(profile)
     user = db.get(Usuario, user_id)
-    return StudentPlanPublic(
-        usuario_id=user.id,
-        ci=user.ci,
-        nombres=user.nombres,
-        apellidos=user.apellidos,
-        plan_estudio_id=plan.id,
-        plan_codigo=plan.codigo,
-        plan_estado=plan.estado,
+    return _student_plan_output(db, profile, user, plan)
+
+
+def assign_student_opening(db: Session, user_id: UUID, opening_id: UUID) -> StudentPlanPublic:
+    profile = db.get(PerfilEstudiante, user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    opening = db.get(AperturaPlan, opening_id)
+    if not opening:
+        raise HTTPException(status_code=404, detail="Grupo de inicio no encontrado")
+    if profile.plan_estudio_id != opening.plan_id:
+        raise HTTPException(status_code=409, detail="El grupo no pertenece al plan del estudiante")
+    start = db.get(PeriodoAcademico, opening.periodo_inicio_id)
+    earlier_enrollment = db.scalar(
+        select(Inscripcion.id)
+        .join(Curso, Curso.id == Inscripcion.curso_id)
+        .join(PeriodoAcademico, PeriodoAcademico.id == Curso.periodo_id)
+        .where(
+            Inscripcion.estudiante_id == user_id,
+            PeriodoAcademico.fecha_inicio < start.fecha_inicio,
+        )
+        .limit(1)
     )
+    if earlier_enrollment:
+        raise HTTPException(
+            status_code=409,
+            detail="El grupo inicia después de la primera inscripción del estudiante",
+        )
+    profile.apertura_plan_id = opening.id
+    db.commit()
+    return _student_plan_output(db, profile, profile.usuario, db.get(PlanEstudio, opening.plan_id))

@@ -190,7 +190,7 @@ CI y correo son únicos y los campos obligatorios deben validarse. La autenticac
 
 #### RN03 Perfil y contraseñas
 
-La consulta y actualización del perfil afectan a la cuenta propia; desde esa edición solo cambia el teléfono. Los nombres, apellidos y CI se corrigen por administradores autorizados. Las contraseñas nuevas tienen un mínimo de 8 y un máximo de 128 caracteres. Todos los roles deben cambiarlas en el primer ingreso; restablecer acceso establece una contraseña temporal y también obliga a cambiarla. El servidor limita las operaciones hasta completar el cambio; al guardar la contraseña nueva revoca las sesiones y exige autenticarse nuevamente. El cambio verifica la contraseña actual. El administrador común opera sobre docentes y estudiantes; el principal también sobre otros administradores.
+Todos los roles pueden consultar su perfil. Docentes y estudiantes no pueden editar datos personales propios: solicitan correcciones a Administración Académica. El administrador puede actualizar su propio teléfono y corregir nombres, apellidos, CI y teléfono de docentes y estudiantes desde la gestión de usuarios; el correo no se edita. Las contraseñas nuevas tienen un mínimo de 8 y un máximo de 128 caracteres. Todos los roles deben cambiarlas en el primer ingreso; restablecer acceso establece una contraseña temporal y también obliga a cambiarla. El servidor limita las operaciones hasta completar el cambio; al guardar la contraseña nueva revoca las sesiones y exige autenticarse nuevamente. El cambio verifica la contraseña actual. El administrador común opera sobre docentes y estudiantes; el principal también sobre otros administradores.
 
 #### RN04 Carreras
 
@@ -206,7 +206,7 @@ Cada plan pertenece a una carrera, tiene un código único en todo el sistema y 
 
 #### RN07 Materias del plan y prerrequisitos
 
-Una materia no se duplica dentro del mismo plan. Cada materia se asigna a un semestre del plan, cualquiera sea la modalidad. Los prerrequisitos relacionan MateriaPlan del mismo plan; no admiten autorreferencias, ciclos directos o indirectos ni conexiones a otros planes. Para cursar una materia con prerrequisitos, se deben aprobar todos con nota final de 51 o más. La posición semestral no reemplaza este control ni agrega un bloqueo automático. Solo se elimina un plan sin estudiantes asignados y sin ofertas o registros vinculados.
+Una materia no se duplica dentro del mismo plan. Cada materia se asigna a un semestre del plan, cualquiera sea la modalidad. Los prerrequisitos relacionan MateriaPlan del mismo plan; no admiten autorreferencias, ciclos directos o indirectos ni conexiones a otros planes. Para cursar una materia con prerrequisitos, se deben aprobar todos con nota final de 51 o más en un periodo académico anterior al de la nueva inscripción. Aprobar el prerrequisito en un bloque modular no habilita la materia dependiente en otro bloque del mismo periodo. La posición semestral no reemplaza este control ni agrega un bloqueo automático. Solo se elimina un plan sin estudiantes asignados y sin ofertas o registros vinculados.
 
 #### RN08 Asignación del plan
 
@@ -222,7 +222,7 @@ activo e inscripcionAbierta son condiciones distintas. Un paralelo activo puede 
 
 #### RN11 Cambios y cruces de horario
 
-La creación comprueba cruces del docente y la modificación también los de estudiantes inscritos. Hay cruce únicamente si existe una fecha real de impartición común, coincidencia de día semanal y superposición de horas. Compartir día semanal con intervalos de fechas disjuntos no es cruce. Una clase puede comenzar exactamente cuando termina otra. No basta comprobar solo que los intervalos globales de fechas se intersecten: debe existir una fecha de clase común. Los feriados se registran por periodo y afectan a todos sus paralelos. La excepción por paralelo permite cancelar una sesión o reprogramarla dentro del periodo, con fecha y horario sustitutos.
+La creación y modificación comprueban cruces del docente y del aula; las modificaciones también consideran estudiantes inscritos. Hay cruce únicamente si existe una fecha real de impartición común, coincidencia de día semanal y superposición de horas. Compartir día semanal con intervalos de fechas disjuntos no es cruce. Una clase puede comenzar exactamente cuando termina otra. No basta comprobar solo que los intervalos globales de fechas se intersecten: debe existir una fecha de clase común. Los feriados se registran por periodo y afectan a todos sus paralelos. La excepción por paralelo permite cancelar una sesión o reprogramarla dentro del periodo, con fecha y horario sustitutos. El servidor valida los recursos al guardar; la interfaz no reemplaza esta comprobación.
 
 #### RN12 Habilitación individual
 
@@ -230,7 +230,7 @@ La habilitación pertenece a un estudiante y periodo y puede autorizarse o revoc
 
 #### RN13 Admisión de una inscripción
 
-Se exige cuenta activa, plan asignado y vigente, materia del plan, habilitación activa del estudiante en el periodo, paralelo activo con inscripción abierta, cupo disponible, todos los prerrequisitos aprobados con nota final de 51 o más, ausencia de otra inscripción activa a la misma materia en el mismo periodo y ausencia de cruces efectivos con inscripciones vigentes. No se bloquea una materia por pertenecer a un semestre anterior o posterior al nivel que el estudiante cursó previamente; la disponibilidad depende de su oferta y de estas condiciones. Si falla alguna condición se rechaza la operación y se indica el motivo.
+Se exige cuenta activa, plan asignado y vigente, materia del plan, habilitación activa del estudiante en el periodo, paralelo activo con inscripción abierta, cupo disponible, todos los prerrequisitos aprobados con nota final de 51 o más en un periodo académico anterior, ausencia de otra inscripción activa a la misma materia en el mismo periodo y ausencia de cruces efectivos con inscripciones vigentes. Una materia reprobada no se repite dentro del mismo periodo; puede repetirse en uno posterior si se oferta y se cumplen las demás condiciones. No se bloquea una materia por pertenecer a un semestre anterior o posterior al nivel que el estudiante cursó previamente; la disponibilidad depende de su oferta y de estas condiciones. Si falla alguna condición se rechaza la operación y se indica el motivo.
 
 #### RN14 Duplicidad cupos e historial
 
@@ -407,6 +407,8 @@ Tabla 9. 6.5.1 Paquetes y clases
 | PeriodoAcademico | id: UUID; denominacion: String; fechaInicio: Date; fechaFin: Date |
 | Curso | id: UUID; paralelo: String; cupo: Integer; fechaInicio: Date; fechaFin: Date; inscripcionAbierta: Boolean; activo: Boolean |
 | HorarioClase | id: UUID; diaSemana: DiaSemana; horaInicio: Time; horaFin: Time; aula: String |
+| Aula | codigo: String; activa: Boolean |
+| BloqueHorario | id: UUID; turno: String; nombre: String; horaInicio: Time; horaFin: Time; activo: Boolean |
 | HabilitacionInscripcion | id: UUID; activa: Boolean; origen: OrigenHabilitacion; fechaAutorizacion: DateTime |
 | Inscripcion | id: UUID; fechaInscripcion: DateTime; estado: EstadoInscripcion |
 | Calificacion | id: UUID; notaFinal: Integer; fechaRegistro: DateTime |
@@ -790,7 +792,7 @@ Tabla 15. Usuarios y acceso RF01 a RF10
 | RF05 | Aplicar permisos<br>Actor: Administrador, Docente y Estudiante | Restringir funciones y registros por rol y relación con los datos; comprobar autorización en backend. |
 | RF06 | Cerrar sesión<br>Actor: Administrador, Docente y Estudiante | Cerrar y revocar la sesión para que no continúe autorizando operaciones. |
 | RF07 | Consultar perfil<br>Actor: Administrador, Docente y Estudiante | Consultar la información personal de la cuenta propia. |
-| RF08 | Actualizar teléfono<br>Actor: Administrador, Docente y Estudiante | Permitir modificar solo el teléfono propio desde el perfil y bloquear los otros campos. |
+| RF08 | Actualizar teléfono<br>Actor: Administrador | Permitir actualizar el teléfono propio y corregir el teléfono de docentes y estudiantes desde administración. Docentes y estudiantes no editan sus datos desde el perfil. |
 | RF09 | Cambiar contraseña<br>Actor: Administrador, Docente y Estudiante | Cambiar la contraseña propia tras verificar la actual. |
 | RF10 | Restablecer contraseña<br>Actor: Administrador (incluye principal) | Establecer contraseña temporal para otro usuario y forzar cambio antes de funciones académicas. El administrador común solo puede restablecer la de docentes y estudiantes; el principal también la de otros administradores. |
 
@@ -827,8 +829,8 @@ Tabla 18. Oferta e inscripciones RF24 a RF26
 
 | Código | Nombre y actores | Descripción funcional completa |
 | --- | --- | --- |
-| RF24 | Consultar oferta<br>Actor: Estudiante | Mostrar paralelos de materias de cualquier semestre del plan asignado con docente, fechas, horario, cupos y estado de inscripción. Informar si faltan prerrequisitos y no habilitar la acción de inscripción hasta que todos estén aprobados. |
-| RF25 | Inscribirse en paralelo<br>Actor: Estudiante | Inscribir solo con cuenta activa, plan y materia correspondientes, habilitación del estudiante en periodo, plan vigente, paralelo activo con inscripción abierta y cupo, prerrequisitos con nota >=51, sin otra inscripción activa a misma materia y periodo ni cruces efectivos de clases. |
+| RF24 | Consultar oferta<br>Actor: Estudiante | Mostrar paralelos de materias de cualquier semestre del plan asignado con docente, fechas, horario, cupos y estado de inscripción. Informar si faltan prerrequisitos aprobados en un periodo anterior y no habilitar la acción de inscripción hasta cumplirlos. |
+| RF25 | Inscribirse en paralelo<br>Actor: Estudiante | Inscribir solo con cuenta activa, plan y materia correspondientes, habilitación del estudiante en periodo, plan vigente, paralelo activo con inscripción abierta y cupo, prerrequisitos con nota >=51 en un periodo académico anterior, sin otra inscripción activa a misma materia y periodo ni cruces efectivos de clases. Una materia reprobada solo se repite en un periodo posterior. |
 | RF26 | Consultar paralelos<br>Actor: Administrador (incluye principal), Docente, Estudiante | Administrador consulta todos; docente solo los asignados; estudiante solo los inscritos, con materia, docente, fechas y horario. |
 
 #### Calificaciones RF27 a RF29
@@ -905,7 +907,7 @@ Tabla 24. Usuarios y acceso
 | HU02<br>RF02 | Como administrador autorizado, quiero inactivar cuentas según mis privilegios, para retirar acceso conservando el historial académico. | La cuenta inactiva no accede y conserva inscripciones y notas. Solo el principal inactiva administradores; la cuenta principal no se inactiva mediante la gestión ordinaria. |
 | HU03<br>RF03 | Como administrador autorizado, quiero corregir los datos oficiales de identidad, para mantener registros personales consistentes. | Se corrigen nombres, apellidos y CI sin duplicados. Docentes y estudiantes no modifican esos datos oficiales; las cuentas administrativas solo las gestiona el principal. |
 | HU04<br>RF04<br>RF05<br>RF06 | Como administrador, docente o estudiante, quiero iniciar y cerrar sesión con acceso limitado a mis permisos, para utilizar de forma controlada las funciones de mi rol. | Solo se ingresa con credenciales válidas y cuenta activa. Se rechazan operaciones y registros no autorizados. Tras cerrar sesión su autorización deja de ser utilizable. |
-| HU05<br>RF07<br>RF08 | Como administrador, docente o estudiante, quiero consultar mi perfil y actualizar únicamente mi teléfono, para mantener mi información de contacto vigente. | La cuenta propia muestra sus datos. Solo permite guardar el teléfono válido; los demás campos son de lectura y se rechaza su modificación desde el perfil. |
+| HU05<br>RF07<br>RF08 | Como usuario, quiero consultar mi perfil y, si soy administrador, actualizar teléfonos propios o de cuentas que gestiono, para mantener la información de contacto vigente. | Todos los roles consultan su perfil. Docentes y estudiantes no pueden modificar datos propios; la API rechaza la actualización. Administración corrige los datos permitidos desde gestión de usuarios. El administrador puede actualizar su teléfono propio. |
 | HU06<br>RF09 | Como administrador, docente o estudiante, quiero cambiar mi contraseña verificando la actual, para mantener el control de mi cuenta. | La contraseña actual correcta permite establecer la nueva; una incorrecta impide el cambio. |
 | HU07<br>RF10 | Como administrador autorizado, quiero restablecer contraseñas de las cuentas que puedo gestionar, para ayudar a sus titulares a recuperar el acceso. | Se establece contraseña temporal para una cuenta autorizada y se exige cambiarla antes de funciones académicas. El común opera sobre docentes y estudiantes; el principal también sobre otros administradores. |
 
@@ -931,8 +933,8 @@ Tabla 26. Periodos paralelos e inscripciones
 | HU14<br>RF19 | Como administrador, quiero registrar el semestre académico con fechas válidas, para delimitar la programación de los paralelos y habilitaciones. | Un periodo semestral con denominación y fechas válidas queda disponible para ambas modalidades. En modalidad modular, los paralelos delimitan bloques mensuales dentro del semestre. Se rechaza fecha final anterior a la inicial. |
 | HU15<br>RF20<br>RF21<br>RF22 | Como administrador, quiero crear y mantener paralelos con cupo docente y horarios, para organizar la oferta sin conflictos y conservando el historial. | El paralelo conserva materia del plan, periodo, identificador, cupo, fechas, docente y horario. Las fechas quedan en el periodo. Se rechazan cruces del docente y cambios que generen cruces para inscritos. Se activa o inactiva conservando historial y solo se elimina sin inscripciones ni notas. |
 | HU16<br>RF23 | Como administrador, quiero abrir y cerrar la inscripción del paralelo, para controlar cuándo admite estudiantes. | El estado de inscripción refleja la apertura seleccionada y es independiente de activo. Abrir requiere docente, horario, cupo válido y plan vigente. El servidor rechaza nuevas inscripciones estando cerrado. |
-| HU17<br>RF24 | Como estudiante, quiero consultar la oferta de mi plan con sus cupos, horarios y requisitos, para elegir un paralelo que puedo cursar. | La oferta incluye materias de cualquier semestre del plan propio, docente, fechas, horarios, cupos y estado de inscripción. Si hay prerrequisitos pendientes, se muestran y la acción de inscripción no está habilitada. |
-| HU18<br>RF25<br>RF31 | Como estudiante, quiero inscribirme en un paralelo cuando cumpla sus condiciones, para cursar una materia sin conflictos académicos ni de horario. | La inscripción se registra y avisa solo con cuenta activa, habilitación vigente del periodo, plan vigente, materia correspondiente, paralelo activo y abierto, cupo, prerrequisitos aprobados, sin duplicidad activa en materia y periodo ni cruces reales. Se indica el motivo al rechazar; 51 aprueba y 50 no. La concurrencia no genera duplicados ni excede cupos. |
+| HU17<br>RF24 | Como estudiante, quiero consultar la oferta de mi plan con sus cupos, horarios y requisitos, para elegir un paralelo que puedo cursar. | La oferta incluye materias de cualquier semestre del plan propio, docente, fechas, horarios, cupos y estado de inscripción. Si hay prerrequisitos pendientes o aprobados solo en el periodo actual, se muestran y la acción de inscripción no está habilitada. |
+| HU18<br>RF25<br>RF31 | Como estudiante, quiero inscribirme en un paralelo cuando cumpla sus condiciones, para cursar una materia sin conflictos académicos ni de horario. | La inscripción se registra y avisa solo con cuenta activa, habilitación vigente del periodo, plan vigente, materia correspondiente, paralelo activo y abierto, cupo, prerrequisitos aprobados en un periodo anterior, sin duplicidad activa en materia y periodo ni cruces reales. Una materia reprobada solo puede repetirse en un periodo posterior. Se indica el motivo al rechazar; 51 aprueba y 50 no. La concurrencia no genera duplicados ni excede cupos. |
 | HU19<br>RF26 | Como administrador, docente o estudiante, quiero consultar los paralelos que me corresponden, para conocer sus datos y horarios autorizados. | El administrador ve todos los paralelos; el docente solo asignados y el estudiante solo inscritos, con materia, docente, fechas y horario. Se bloquea consulta ajena. |
 
 #### Notas panel y avisos
@@ -1030,15 +1032,15 @@ Usuarios: Administrador, Docente y Estudiante
 
 Ruta propuesta: /perfil
 
-Objetivo: Consultar perfil propio y mantener teléfono y contraseña.
+Objetivo: Consultar perfil propio; cambiar la contraseña propia y permitir edición de teléfono solo a Administración.
 
-Funcionalidades: Mostrar datos personales; editar solo teléfono; cambiar contraseña mediante verificación de actual.
+Funcionalidades: Mostrar datos personales a todos los roles; permitir al administrador actualizar su teléfono; mostrar el perfil de Docentes y Estudiantes en solo lectura; cambiar contraseña mediante verificación de la actual.
 
-Acciones y botones previstos: Guardar teléfono; cambiar contraseña; consultar datos.
+Acciones y botones previstos: Administrador: guardar teléfono. Docente/Estudiante: consultar datos. Todos los roles: cambiar contraseña.
 
-Campos principales: Datos de cuenta en lectura, teléfono editable, contraseña actual y nueva en formulario correspondiente.
+Campos principales: Datos de cuenta en lectura; teléfono editable solo para Administrador; contraseña actual y nueva en el formulario correspondiente.
 
-Validaciones: Rechazar cambios de identidad/correo/rol desde perfil; comprobar contraseña actual y propiedad de la cuenta.
+Validaciones: Rechazar desde API la edición de perfil por Docentes y Estudiantes; la gestión administrativa valida los campos corregibles. Rechazar cambios de CI, correo y rol desde perfil; comprobar contraseña actual.
 
 RF relacionados: RF07, RF08, RF09
 
@@ -1052,9 +1054,9 @@ Ruta propuesta: /admin/usuarios
 
 Objetivo: Gestionar cuentas permitidas y habilitar estudiantes por periodo.
 
-Funcionalidades: Alta, consulta, corrección de identidad, activación/inactivación y restablecimiento según privilegios; asignación de plan; habilitación individual. Solo el principal ve gestión de otros administradores.
+Funcionalidades: Alta, consulta, corrección de identidad y teléfono, activación/inactivación y restablecimiento según privilegios; asignación de plan; habilitación individual. Solo el principal ve gestión de otros administradores.
 
-Acciones y botones previstos: Registrar; editar identidad; activar/inactivar; restablecer clave; asignar plan; habilitar/revocar por periodo.
+Acciones y botones previstos: Registrar; corregir identidad y teléfono; activar/inactivar; restablecer clave; asignar plan; habilitar/revocar por periodo.
 
 Campos principales: Nombres, apellidos, CI, correo, teléfono, rol permitido, activo; estudiante, carrera/plan, periodo, habilitación, origen y fecha. No editar el privilegio principal por un administrador común.
 
@@ -1146,9 +1148,11 @@ Funcionalidades: Crear, editar, asignar docente, gestionar horarios, activo y ap
 
 Acciones y botones previstos: Crear; editar; gestionar horario; activar/inactivar; abrir/cerrar inscripción; eliminar condicionado.
 
-Campos principales: Materia del plan, periodo, paralelo, cupo, fechas, docente, días, horas, aula si se utiliza, activo e inscripción abierta.
+Campos principales: Materia del plan, periodo, paralelo, cupo, fechas, docente, días, horas, aula del catálogo si se utiliza, activo e inscripción abierta. Incluye vista semanal conjunta del periodo y acceso al detalle de cada paralelo.
 
-Validaciones: Fechas dentro del periodo, rangos válidos, cupo válido y ausencia de cruces reales del docente e inscritos; condiciones previas a abrir; historial protegido.
+Validaciones: Fechas dentro del periodo, rangos válidos, cupo válido y ausencia de cruces reales de docente, aula e inscritos; condiciones previas a abrir; historial protegido.
+
+Configuración de apoyo: `/admin/planificacion-config` permite administrar códigos sencillos de aula y bloques de hora por los turnos Madrugada, Mañana, Tarde y Noche. La plantilla solo precarga horas en el formulario: el horario de cada paralelo conserva sus horas si cambia la plantilla. Inactivar un aula o bloque conserva el historial y lo retira de nuevas asignaciones.
 
 RF relacionados: RF20, RF21, RF22, RF23, RF26, RF32
 
@@ -1249,7 +1253,7 @@ Tabla 30. Trazabilidad Usuarios y acceso
 | RF05 | HU04 | CU01:estado | Usuario; seguridad (módulo) | P01–P14 | T05 |
 | RF06 | HU04 | CU01:logout | SesionAutenticacion | Compartida | T06 |
 | RF07 | HU05 | CU01:verperfil | Usuario | P14 | T07 |
-| RF08 | HU05 | CU01:telefono | Usuario | P14 | T08 |
+| RF08 | HU05 | CU01:telefono | Administrador | P03/P14 | T08 |
 | RF09 | HU06 | CU01:clave | Usuario | P14/P01 | T09 |
 | RF10 | HU07 | CU01:reset | Usuario; seguridad (módulo) | P03/P01 | T10 |
 
@@ -1350,7 +1354,7 @@ Tabla 38. Pruebas Usuarios y acceso
 | T05<br>RF05 | Aplicar permisos | Restringir funciones y registros por rol y relación con los datos; comprobar autorización en backend. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
 | T06<br>RF06 | Cerrar sesión | Cerrar y revocar la sesión para que no continúe autorizando operaciones. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
 | T07<br>RF07 | Consultar perfil | Consultar la información personal de la cuenta propia. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
-| T08<br>RF08 | Actualizar teléfono | Permitir modificar solo el teléfono propio desde el perfil y bloquear los otros campos. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
+| T08<br>RF08 | Actualizar teléfono | Permitir al administrador actualizar su teléfono y corregir el de docentes/estudiantes desde administración. Rechazar toda edición personal de docentes y estudiantes desde su perfil. |
 | T09<br>RF09 | Cambiar contraseña | Cambiar la contraseña propia tras verificar la actual. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
 | T10<br>RF10 | Restablecer contraseña | Establecer contraseña temporal para otro usuario y forzar cambio antes de funciones académicas. El administrador común solo puede restablecer la de docentes y estudiantes; el principal también la de otros administradores. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
 
@@ -1387,8 +1391,8 @@ Tabla 41. Pruebas Oferta e inscripciones
 
 | Prueba y RF | Operación | Resultado o condición a verificar |
 | --- | --- | --- |
-| T24<br>RF24 | Consultar oferta | Mostrar materias de cualquier semestre del plan asignado; señalar prerrequisitos pendientes y no habilitar la acción de inscripción hasta que estén aprobados. |
-| T25<br>RF25 | Inscribirse en paralelo | Inscribir solo con cuenta activa, plan y materia correspondientes, habilitación del estudiante en periodo, plan vigente, paralelo activo con inscripción abierta y cupo, prerrequisitos con nota >=51, sin otra inscripción activa a misma materia y periodo ni cruces efectivos de clases. La posición semestral no bloquea por sí sola retomar o adelantar. Verificar aprobación y rechazo de cada condición inválida. |
+| T24<br>RF24 | Consultar oferta | Mostrar materias de cualquier semestre del plan asignado; señalar prerrequisitos pendientes o aprobados solo en el periodo actual y no habilitar la acción de inscripción hasta que estén aprobados en un periodo anterior. |
+| T25<br>RF25 | Inscribirse en paralelo | Inscribir solo con cuenta activa, plan y materia correspondientes, habilitación del estudiante en periodo, plan vigente, paralelo activo con inscripción abierta y cupo, prerrequisitos con nota >=51 en un periodo académico anterior, sin otra inscripción activa a misma materia y periodo ni cruces efectivos de clases. Verificar que una materia reprobada no se repita en el mismo periodo y que pueda repetirse en uno posterior si se oferta. La posición semestral no bloquea por sí sola retomar o adelantar. Verificar aprobación y rechazo de cada condición inválida. |
 | T26<br>RF26 | Consultar paralelos | Administrador consulta todos; docente solo los asignados; estudiante solo los inscritos, con materia, docente, fechas y horario. Verificar el caso válido y el rechazo de cada condición inválida que corresponda. |
 
 #### Pruebas Calificaciones
@@ -1557,6 +1561,12 @@ Tabla 46. 14.7 Observaciones y cambios de versión
 | Autorización | El administrador consulta notas mediante reportes; registrar/corregir corresponde al docente asignado. Los detalles finos de permisos administrativos deben cerrarse. |
 | UML y exportación | Se conserva el PlantUML v8 del dominio y el contenido del Draw.io definitivo. Las fuentes complementarias no sustituyen la versión Draw.io preferida. |
 | Contraseñas temporales | El modelo v8 no incluye el indicador persistente. La implementación agrega el indicador, contraseña temporal y cambio obligatorio para todos los roles; el informe debe describir esta ampliación física. |
+| Perfil de Docente y Estudiante | Cambio funcional confirmado después de v8: estos roles consultan sus datos en solo lectura y no pueden editar datos personales propios. Administración corrige los datos permitidos desde gestión de usuarios. El administrador puede actualizar su propio teléfono. El cambio de contraseña sigue disponible para todos. Se conservan RF07/RF08 y HU05. |
+| Planificación visual, aulas y turnos | Cambio funcional confirmado durante el rediseño: P08 agrega vista semanal conjunta por periodo y catálogo sencillo de códigos de aula. Se configuran franjas para Madrugada, Mañana, Tarde y Noche; elegir una copia sus horas al paralelo, sin propagación retroactiva. Los cruces de aula se validan por fecha real y solapamiento horario en el servidor. La configuración usa `/admin/planificacion-config`; no cambia la independencia entre habilitación y apertura. |
+| Planificación por carrera y plan | Decisión confirmada e implementada: el periodo académico sigue siendo el ciclo semestral común; el administrador incorpora explícitamente las carreras participantes y puede trabajar con varios planes VIGENTES de una misma carrera. El sistema obtiene las materias de cada plan y las presenta agrupadas por semestre curricular para decidir su oferta en ese periodo. No ofertar una materia afecta solo a la programación del periodo, no al catálogo global ni a la estructura publicada del plan. Los límites de los bloques mensuales modulares y el tratamiento de una oferta con inscripciones existentes al retirarla requieren definición adicional. |
+| Propuesta de oferta según avance | Implementada para apoyar la preparación del nuevo semestre académico: por materia del plan se muestran estudiantes activos aptos, repetidores aptos, bloqueados por prerrequisitos, aprobados y casos sin nota. Solo cuentan calificaciones de periodos cuya fecha final precede al inicio del periodo objetivo. Se sugiere una materia si tiene estudiantes aptos en su semestre nominal o repetidores aptos; el administrador decide si abre paralelos. La eventual aprobación administrativa de notas cambiaría qué resultados se consideran oficiales y sigue pendiente. |
+| Progresión entre periodos | Decisión confirmada e implementada para MODULAR y SEMESTRAL: la aprobación de un prerrequisito en un periodo académico habilita la materia dependiente solo en un periodo posterior, nunca en otro módulo del mismo periodo. Una materia reprobada no se repite en el mismo periodo; puede volver a ofertarse y cursarse en uno posterior. Esto no introduce un bloqueo general por número de semestre curricular. |
+| Inicio y proyección de un plan | Confirmado e implementado: una misma versión del plan puede recibir varios grupos de ingreso en distintos periodos. Cada estudiante con ese plan puede vincularse a su grupo; el sistema proyecta desde el periodo inicial hasta el último semestre curricular del plan y muestra los periodos ya creados. Nueve semestres es un ejemplo, no un límite global. Publicar una nueva versión del plan es otra operación; la progresión nominal del grupo no sustituye la evaluación individual de materias reprobadas y aprobadas. |
 | Reinscripción | unique(estudiante, curso) y estado RETIRADA necesitan una política compatible antes de ofrecer retiro o reingreso; no se incorpora ese flujo. |
 
 ### 14.8 Decisiones pendientes y estado de aprobación
@@ -1572,12 +1582,18 @@ Tabla 47. 14.8 Decisiones pendientes y estado de aprobación
 | Unicidad del código de plan | Alcance de la unicidad del código de plan. | Confirmado: único en todo el sistema. |
 | Calendario de periodos y paralelos | Tratamiento de feriados y excepciones de una sesión. | Confirmado: feriado por periodo; cada paralelo puede cancelar o reprogramar una sesión dentro del periodo. |
 | Semestre curricular y periodo académico | Si se unifican el semestre del plan y el ciclo de oferta/inscripción. | Confirmado: conceptos distintos; el periodo representa el ciclo semestral común a ambas modalidades. Los módulos mensuales se delimitan con fechas de paralelo dentro del periodo. La experiencia administrativa debe enlazar planificación de oferta y habilitaciones por periodo. |
+| Carreras y planes participantes del periodo | Si se programan todas las carreras de forma automática y cuántos planes se admiten por carrera. | Confirmado: el administrador incorpora carreras al periodo de manera explícita y puede incluir varios planes VIGENTES por carrera; las materias se obtienen de esos planes. |
+| Demanda sugerida para el siguiente periodo | Cómo contar estudiantes que pueden avanzar, necesitan repetir o aún no tienen nota; cuándo se actualiza la sugerencia. | Implementado con estudiantes activos del plan y notas de periodos académicos terminados antes del objetivo; se recalcula al consultar. Pendiente: efecto de una futura aprobación administrativa de notas. |
+| Aperturas y cohortes de un plan | Si una versión del plan puede iniciar varias cohortes, cómo se asignan los estudiantes y cómo se proyectan los periodos hasta completar sus semestres curriculares. | Confirmado e implementado: el plan puede tener múltiples grupos por periodo inicial; un estudiante se vincula a un grupo de su plan. Se proyectan los semestres según las unidades del plan y los periodos disponibles, sin crear planes nuevos ni mover estudiantes con historial a otra versión. |
+| Continuidad de planes anteriores | Cómo seguir ofertando materias a estudiantes con historial cuando se publica una nueva versión del plan. | Pendiente de diseño; hoy solo un plan VIGENTE admite nuevas ofertas y el estudiante con historial no puede cambiar de plan. Pueden coexistir varios planes VIGENTES de una carrera. |
+| Bloques mensuales de modalidad MODULAR | Si sus límites coinciden con meses calendario o son rangos configurables; si varias materias pueden compartir bloque. | Pendiente de confirmar antes de fijar la interfaz y las restricciones de fechas. |
+| Retirar una materia de la oferta del periodo | Qué hacer si ya existen paralelos abiertos, inscripciones o notas. | Pendiente; conservar las reglas vigentes de cierre, inactivación e historial hasta definir el flujo. |
 | Inactivación de paralelos | Efecto de inactivar sobre la apertura de inscripciones. | Confirmado: inactivar cierra inscripciones; reactivar no las abre automáticamente. |
 | Reducción del cupo | Regla para un cupo menor a inscripciones activas existentes. | Confirmado: se rechaza la reducción por debajo de ese conteo. |
 | Habilitación automática | Condiciones exactas para origen SISTEMA, disparador y revocación. | Pendiente; solo gestión manual definida. |
 | Autenticación | Sesión, duración, renovación, revocación y credenciales temporales. | Confirmado e implementado parcialmente: cookie de sesión opaca revocable en servidor, HttpOnly/SameSite=Lax, duración de 8 horas, Argon2 y cambio obligatorio para todos los roles. Recuperación del principal sigue pendiente. |
 | Captura de códigos visibles | Determinar si los códigos los ingresa el administrador o los genera el sistema. | Confirmado: se ingresan manualmente siguiendo la práctica institucional. No generar códigos automáticamente. Mantener conversión a mayúsculas y las validaciones de duplicados ya implementadas; el código de plan sigue siendo único en todo el sistema. |
-| Avance y repetición de materias | Determinar si la posición semestral bloquea materias pendientes o adelantadas. | Confirmado: no hay bloqueo por semestre. El estudiante puede retomar materias reprobadas o adelantar materias de cualquier semestre si están ofertadas, tiene habilitación activa para el periodo y cumple los prerrequisitos (todas las notas requeridas >=51) y demás condiciones de inscripción. |
+| Avance y repetición de materias | Determinar si la posición semestral bloquea materias pendientes o adelantadas y si una aprobación durante el periodo habilita otro módulo. | Confirmado: no hay bloqueo por número de semestre curricular. El estudiante puede retomar materias reprobadas en un periodo posterior o adelantar materias de cualquier semestre si están ofertadas, tiene habilitación activa para el periodo y cumple los prerrequisitos (todas las notas requeridas >=51 en un periodo anterior) y demás condiciones de inscripción. Una nota del mismo periodo no habilita la materia dependiente. |
 | Configuración de nota mínima aprobatoria | Determinar si el umbral de aprobación puede cambiarse y a qué calificaciones se aplica un cambio. | Regla vigente confirmada: 51. La implementación no ofrece un parámetro de configuración; el valor está fijo en código. La futura configuración requiere definir quién puede cambiarlo y si se aplica solo a evaluaciones futuras o también al historial. |
 | Permisos administrativos | Alcance detallado de edición de cuentas y posibles cambios de rol existentes. | Principalidad y no autopromoción confirmadas; permisos finos pendientes. |
 | PostgreSQL | Tablas, claves, índices, restricciones, cupos concurrentes e integración con migraciones. | Diseño implementado para acceso, currículo, periodos, paralelos, habilitaciones, inscripciones, notas y notificaciones mediante Alembic; concurrencia de cupos e inscripciones serializada en servicios. |
@@ -1933,7 +1949,7 @@ Los IDs de nodos de este catálogo corresponden a las referencias `CUxx:nodo` ut
 | temporal | Caso de uso | Solicitar cambio de contraseña temporal |
 | logout | Caso de uso | Cerrar sesión |
 | verperfil | Caso de uso | Consultar datos personales |
-| telefono | Caso de uso | Actualizar teléfono |
+| telefono | Caso de uso | Actualizar o corregir teléfono (solo administración) |
 | clave | Caso de uso | Cambiar contraseña propia |
 | registrar | Caso de uso | Registrar docente o estudiante |
 | editar | Caso de uso | Corregir datos de identidad |
@@ -2365,7 +2381,7 @@ Los IDs de nodos de este catálogo corresponden a las referencias `CUxx:nodo` ut
         <mxCell id="verperfil" value="Consultar datos personales" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#111111;strokeWidth=1.5;fontFamily=Arial;fontSize=18;fontColor=#111111;align=center;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="865" y="543" width="365" height="68" as="geometry"/>
         </mxCell>
-        <mxCell id="telefono" value="Actualizar teléfono" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#111111;strokeWidth=1.5;fontFamily=Arial;fontSize=18;fontColor=#111111;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="telefono" value="Actualizar teléfono (solo administrador)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#111111;strokeWidth=1.5;fontFamily=Arial;fontSize=18;fontColor=#111111;align=center;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="865" y="657" width="365" height="68" as="geometry"/>
         </mxCell>
         <mxCell id="clave" value="Cambiar contraseña propia" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#111111;strokeWidth=1.5;fontFamily=Arial;fontSize=18;fontColor=#111111;align=center;verticalAlign=middle;" vertex="1" parent="1">
@@ -3178,7 +3194,7 @@ rectangle "Acceso, usuarios y perfiles" {
   usecase "Iniciar sesión" as Login
   usecase "Cerrar sesión" as Logout
   usecase "Consultar mi perfil" as Perfil
-  usecase "Actualizar mi teléfono" as Telefono
+  usecase "Actualizar teléfono (solo administrador)" as Telefono
   usecase "Cambiar mi contraseña" as Clave
   usecase "Registrar docente o estudiante" as Registro
   usecase "Corregir identidad" as Identidad
@@ -3190,7 +3206,7 @@ rectangle "Acceso, usuarios y perfiles" {
 Usuario --> Login
 Usuario --> Logout
 Usuario --> Perfil
-Usuario --> Telefono
+Admin --> Telefono
 Usuario --> Clave
 Admin --> Registro
 Admin --> Identidad

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, time
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.core.validation import (
     Code,
@@ -29,6 +29,11 @@ class CourseScheduleInput(StrictInputModel):
     hora_inicio: time
     hora_fin: time
     aula: AulaText | None = None
+
+    @field_validator("aula")
+    @classmethod
+    def normalize_room(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
 
     @model_validator(mode="after")
     def valid_time_range(self):
@@ -84,12 +89,13 @@ class CourseUpdate(StrictInputModel):
 class CoursePublic(BaseModel):
     id: uuid.UUID
     materia_plan_id: uuid.UUID
+    plan_id: uuid.UUID
+    carrera_id: uuid.UUID
+    facultad_id: uuid.UUID
     materia_codigo: str
     materia_nombre: str
-    plan_id: uuid.UUID
     plan_codigo: str
     plan_estado: EstadoPlan
-    carrera_id: uuid.UUID
     carrera_codigo: str
     carrera_nombre: str
     periodo_id: uuid.UUID
@@ -145,6 +151,11 @@ class ScheduleExceptionCreate(StrictInputModel):
     hora_fin: time | None = None
     aula: AulaText | None = None
     motivo: ReasonText | None = None
+
+    @field_validator("aula")
+    @classmethod
+    def normalize_room(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
 
     @model_validator(mode="after")
     def validate_exception_fields(self):

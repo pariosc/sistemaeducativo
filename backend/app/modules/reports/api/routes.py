@@ -46,7 +46,35 @@ class ReportQuery:
         self.fecha_hasta = fecha_hasta
 
 
-ReportFilters = Annotated[ReportQuery, Depends()]
+async def report_filters(
+    career_id: UUID | None = None,
+    plan_id: UUID | None = None,
+    student_id: UUID | None = None,
+    course_id: UUID | None = None,
+    teacher_id: UUID | None = None,
+    period_id: UUID | None = None,
+    estado_inscripcion: Literal["ACTIVA", "RETIRADA"] | None = None,
+    estado_paralelo: Literal["ACTIVO", "INACTIVO"] | None = None,
+    estado_plan: Literal["BORRADOR", "VIGENTE", "INACTIVO"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> ReportQuery:
+    return ReportQuery(
+        career_id=career_id,
+        plan_id=plan_id,
+        student_id=student_id,
+        course_id=course_id,
+        teacher_id=teacher_id,
+        period_id=period_id,
+        estado_inscripcion=estado_inscripcion,
+        estado_paralelo=estado_paralelo,
+        estado_plan=estado_plan,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
+
+
+ReportFilters = Annotated[ReportQuery, Depends(report_filters)]
 
 
 def _build_report(db: Session, actor: Usuario, code: ReportCode, filters: ReportQuery):

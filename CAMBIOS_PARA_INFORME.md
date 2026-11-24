@@ -1,5 +1,18 @@
 # Cambios para reflejar en el informe
 
+## Perfil en solo lectura para Docente y Estudiante
+
+- Se confirmó que Docentes y Estudiantes consultan su perfil sin poder editar
+  datos personales. La API rechaza la edición aunque se intente enviar la
+  solicitud directamente.
+- Administración puede corregir CI, nombres, apellidos y teléfono de docentes
+  y estudiantes desde gestión de usuarios. El Administrador puede seguir
+  actualizando su propio teléfono; el cambio de contraseña continúa habilitado
+  para todos los roles.
+- Se actualizaron RF07/RF08, HU05, P03/P14 y T08 en el contexto funcional.
+- **Secciones del informe a revisar:** permisos de perfil, gestión de usuarios,
+  aceptación de HU05 y capturas del perfil por rol.
+
 ## Entorno de desarrollo en Windows
 
 - Se documentó el proceso para preparar una computadora Windows nueva:
@@ -411,3 +424,118 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
 - **Secciones del informe a revisar:** RNF de usabilidad y seguridad,
   validaciones por pantalla, manejo de errores, accesibilidad de mensajes,
   capturas con tema claro y oscuro, y registro de pruebas de regresión.
+
+## Planificación de aulas, turnos y horario semanal — 23-11-2026
+
+- P08 incorpora una vista semanal conjunta de paralelos por semestre, con
+  acceso al detalle para administrar asignación y horario. Las fechas de cada
+  paralelo se conservan para modalidad semestral y modular.
+- Se incorpora un catálogo de aulas por código sencillo y franjas configurables
+  para Madrugada, Mañana, Tarde y Noche. Las franjas son plantillas: se copian
+  al horario y sus cambios no alteran lo ya guardado.
+- La API rechaza aulas inactivas o inexistentes y cruces de aula en una fecha de
+  clase real, considerando feriados y excepciones. También valida docente e
+  inscripciones. El formulario consulta una prevalidación al cambiar la franja y
+  muestra conflictos antes del envío; al guardar, el servidor vuelve a validar
+  como autoridad final.
+- La configuración se ubica en `/admin/planificacion-config`. Habilitación
+  individual y apertura de inscripción permanecen como controles separados.
+- Se añadieron pruebas unitarias de fechas inclusivas, feriados, cancelación,
+  reprogramación y límites de superposición; pruebas de API para catálogo,
+  permisos, horas inválidas, prevalidación sin persistencia, cruces de aula,
+  docente y estudiante inscrito, bloques modulares disjuntos, la independencia
+  entre plantillas y horarios guardados, y el flujo de apertura.
+- Verificación ejecutada el 23-11-2026: 26 pruebas backend aprobaron en
+  SQLite; Ruff, TypeScript y build Vite aprobaron. La base PostgreSQL local no
+  estaba accesible durante esa primera ejecución; posteriormente se detectó que
+  estaba en `0008_facultades`, se aplicó `0009_planificacion_recursos` y
+  Alembic confirmó `0009`. Las consultas ORM reales devolvieron las aulas
+  heredadas y la lista de bloques; las pruebas concurrentes de PostgreSQL siguen
+  pendientes.
+- **Secciones del informe a revisar:** RN09/RN11, modelo físico, CU03, P08,
+  decisiones registradas en 14.7 y cobertura T20/T21.
+
+## Decisión de flujo centrado en el plan — 23-11-2026
+
+- Se confirmó que las carreras se incorporarán explícitamente al periodo y que
+  una carrera podrá trabajar con varios planes VIGENTES en el mismo semestre.
+- La planificación muestra automáticamente las materias de cada plan,
+  agrupadas por semestre curricular; el administrador decidirá qué ofertar.
+  No ofertar una materia en un periodo no altera el catálogo global ni la
+  estructura publicada del plan.
+- La modalidad SEMESTRAL programará las materias elegidas dentro del semestre
+  académico común; la MODULAR las distribuirá en tramos mensuales del mismo
+  periodo. Quedan por definir los límites de los tramos y el retiro de ofertas
+  con inscripciones o notas. La implementación se resume en la sección siguiente.
+- Se agregó al diseño de la próxima planificación una propuesta de materias
+  para el nuevo semestre basada en el plan y el avance registrado de sus
+  estudiantes: continuidad, repetición y resultados aún sin nota. La decisión
+  de abrir paralelos sigue siendo administrativa. El cálculo y el momento de
+  corte de resultados con visto bueno administrativo están pendientes. La
+  implementación actual se resume en la sección siguiente.
+- Se confirmó para ambas modalidades que una materia dependiente solo podrá
+  cursarse en un periodo académico posterior al de la aprobación de su
+  prerrequisito; tampoco se repite una materia reprobada en el mismo periodo.
+  Se proyectará la secuencia de semestres del plan desde cada inicio de
+  estudiantes, según su duración (nueve es solo un ejemplo). Registrar esas
+  aperturas como grupos de ingreso, la comprobación del periodo de la nota y la
+  proyección se implementaron como se resume en la sección siguiente.
+- **Secciones del informe a revisar:** RN06/RN09, P07/P08, modelo físico y
+  trazabilidad de RF19–RF23.
+
+## Implementación de planificación por plan e ingresos — 23-11-2026
+
+- La migración `0010_aperturas_plan` agrega las relaciones explícitas
+  periodo–carrera y periodo–plan, más los grupos de ingreso de cada versión del
+  plan. Una misma versión admite grupos iniciados en diferentes periodos. Cada
+  estudiante puede vincularse a un grupo de su plan. Las ofertas ya existentes
+  se incorporan a las nuevas relaciones durante la migración; la asignación de
+  grupo de estudiantes existentes se realiza desde la interfaz.
+- La pantalla del semestre permite filtrar carreras por facultad, incorporarlas
+  junto con sus planes VIGENTES,
+  iniciar un grupo y ver la proyección hasta el último semestre curricular del
+  plan. Los periodos aún no creados aparecen como pendientes de programar.
+  Abrir una materia requiere una elección administrativa; el sistema no crea
+  paralelos automáticamente.
+- La oferta muestra las materias agrupadas por semestre curricular y, para
+  estudiantes activos del plan, los conteos de aptos, repetidores, bloqueados,
+  aprobados y sin nota. Solo se toman resultados de periodos terminados antes
+  de comenzar el semestre objetivo. La sugerencia destaca materias del
+  semestre nominal de estudiantes aptos o con repetidores aptos. Si se adopta el
+  visto bueno administrativo de notas, habrá que revisar ese criterio.
+- El calendario semanal permanece visible al abrir el detalle de un paralelo
+  en un panel de la misma página. Puede filtrarse por facultad, carrera, plan,
+  docente y aula. Al editar docente o fechas, la API previsualiza los cruces
+  sin persistir el borrador. La modalidad MODULAR exige que el administrador
+  indique las fechas de su tramo; SEMESTRAL sugiere el periodo completo.
+- La API de inscripción y la oferta del estudiante consideran aprobado un
+  prerrequisito solo cuando la nota proviene de un periodo terminado antes del
+  inicio del periodo objetivo. Aprobar en enero no habilita la dependiente en
+  otro módulo del mismo semestre. Una materia reprobada solo se repite en un
+  semestre académico posterior si vuelve a ofertarse.
+- Verificación: 28 pruebas aprobaron tanto en SQLite como en una base
+  PostgreSQL temporal, incluidas ambas modalidades, repetición, avance,
+  proyección de grupos y vista previa de conflictos sin persistencia. Ruff,
+  formato y compilación TypeScript/Vite aprobaron. La base PostgreSQL local
+  quedó en `0010_aperturas_plan`; `alembic check` no detectó diferencias de
+  esquema. Falta revisión visual administrativa autenticada y pruebas de
+  concurrencia sobre recursos.
+- Después de exigir estudiantes aptos para destacar una materia, agregar el
+  filtro explícito por facultad y permitir asignar plan y grupo juntos,
+  volvieron a pasar las 28 pruebas SQLite, las 2 pruebas de progresión en
+  PostgreSQL temporal, Ruff y la compilación TypeScript/Vite.
+- **Secciones del informe a revisar:** RN06–RN09/RN13, RF18–RF25, HU13–HU18,
+  P07/P08/P09, modelo físico, migraciones y casos T18–T25.
+
+## Integración con cambios del equipo — 24-11-2026
+
+- Se incorporaron cuatro commits remotos a `main` y se reaplicó el trabajo
+  local de planificación académica. En los conflictos de interfaz se conservó
+  el nuevo diseño compartido y la regla de perfil de solo lectura para docentes
+  y estudiantes. Administración mantiene la corrección de teléfono.
+- La salida de paralelos incluye los campos de carrera y plan usados por los
+  reportes del equipo y el identificador de facultad usado por el calendario.
+  Se cambió la dependencia de filtros de reportes a una función asíncrona
+  porque la prueba de integración quedaba esperando en la primera consulta de
+  exportación. Con el ajuste, aprobaron 28 pruebas backend, Ruff y la
+  compilación TypeScript/Vite. Falta revisión visual autenticada.

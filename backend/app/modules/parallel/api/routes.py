@@ -16,11 +16,60 @@ from app.modules.parallel.schemas.courses import (
     ScheduleExceptionCreate,
     ScheduleExceptionPublic,
 )
+from app.modules.parallel.schemas.planning import (
+    RoomCreate,
+    RoomPublic,
+    RoomUpdate,
+    ScheduleBlockCreate,
+    ScheduleBlockPublic,
+    ScheduleBlockUpdate,
+)
 from app.modules.parallel.services import parallel_service as service
+from app.modules.parallel.services import planning_config
 
 router = APIRouter(tags=["paralelos y calendario"])
 AdminUser = Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))]
 AuthenticatedUser = Annotated[Usuario, Depends(user_with_full_access)]
+
+
+@router.get("/api/v1/admin/planning/rooms", response_model=list[RoomPublic])
+async def get_rooms(_: AdminUser, db: DbSession):
+    return planning_config.list_rooms(db)
+
+
+@router.post(
+    "/api/v1/admin/planning/rooms", response_model=RoomPublic, status_code=status.HTTP_201_CREATED
+)
+async def post_room(payload: RoomCreate, _: AdminUser, db: DbSession):
+    return planning_config.create_room(db, payload)
+
+
+@router.patch("/api/v1/admin/planning/rooms/{code}", response_model=RoomPublic)
+async def patch_room(code: str, payload: RoomUpdate, _: AdminUser, db: DbSession):
+    return planning_config.update_room(db, code, payload)
+
+
+@router.get("/api/v1/admin/planning/schedule-blocks", response_model=list[ScheduleBlockPublic])
+async def get_schedule_blocks(_: AdminUser, db: DbSession):
+    return planning_config.list_schedule_blocks(db)
+
+
+@router.post(
+    "/api/v1/admin/planning/schedule-blocks",
+    response_model=ScheduleBlockPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_schedule_block(payload: ScheduleBlockCreate, _: AdminUser, db: DbSession):
+    return planning_config.create_schedule_block(db, payload)
+
+
+@router.patch(
+    "/api/v1/admin/planning/schedule-blocks/{block_id}", response_model=ScheduleBlockPublic
+)
+async def patch_schedule_block(
+    block_id: UUID, payload: ScheduleBlockUpdate, _: AdminUser, db: DbSession
+):
+    return planning_config.update_schedule_block(db, block_id, payload)
 
 
 @router.get("/api/v1/courses", response_model=list[CoursePublic])
@@ -40,11 +89,25 @@ async def patch_course(course_id: UUID, payload: CourseUpdate, _: AdminUser, db:
     return service.update_course(db, course_id, payload)
 
 
+@router.post("/api/v1/admin/courses/{course_id}/preview")
+async def preview_course_update(
+    course_id: UUID, payload: CourseUpdate, _: AdminUser, db: DbSession
+):
+    return service.validate_course_update_preview(db, course_id, payload)
+
+
 @router.put("/api/v1/admin/courses/{course_id}/schedules", response_model=CoursePublic)
 async def put_schedules(
     course_id: UUID, payload: CourseScheduleUpdate, _: AdminUser, db: DbSession
 ):
     return service.replace_schedules(db, course_id, payload.horarios)
+
+
+@router.post("/api/v1/admin/courses/{course_id}/schedules/validate")
+async def validate_schedules(
+    course_id: UUID, payload: CourseScheduleUpdate, _: AdminUser, db: DbSession
+):
+    return service.validate_schedule_preview(db, course_id, payload.horarios)
 
 
 @router.patch("/api/v1/admin/courses/{course_id}/registration", response_model=CoursePublic)

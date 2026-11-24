@@ -14,12 +14,19 @@ from app.modules.enrollments.models import (  # noqa: F401
 from app.modules.grades.models import Calificacion  # noqa: F401
 from app.modules.notifications.models import Notificacion  # noqa: F401
 from app.modules.parallel.models import (  # noqa: F401
+    Aula,
+    BloqueHorario,
     Curso,
     ExcepcionHorario,
     FeriadoPeriodo,
     HorarioClase,
 )
-from app.modules.periods.models import PeriodoAcademico  # noqa: F401
+from app.modules.periods.models import (  # noqa: F401
+    AperturaPlan,
+    PeriodoAcademico,
+    PeriodoCarrera,
+    PeriodoPlan,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

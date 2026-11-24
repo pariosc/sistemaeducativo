@@ -43,9 +43,9 @@ defina y documente las reglas anteriores en
 
 - **Currículo:** facultades, carreras, materias y planes con semestres,
   prerrequisitos y asignación de plan al estudiante.
-- **Periodo académico:** registro de una denominación y fechas que delimitan la
-  programación. En la interfaz el concepto no explica si se debe crear un
-  periodo por semestre o por módulo.
+- **Periodo académico:** registro de una denominación y fechas del ciclo
+  semestral común a planes SEMESTRALES y MODULARES. Actualmente no guarda la
+  selección explícita de carreras y planes participantes.
 - **Paralelos:** creación de una oferta para una materia del plan y un periodo;
   en ese registro se puede asignar docente, cupo, fechas y horarios. El paralelo
   se abre por separado para aceptar inscripciones. Esto cubre la asignación
@@ -76,10 +76,18 @@ defina y documente las reglas anteriores en
 
 ### Decisiones pendientes antes de cambiar el flujo
 
-1. **Planificación de oferta:** ¿basta mejorar la pantalla de Paralelos para
-   guiar la preparación por periodo, o se necesita una pantalla de planificación
-   que agrupe todas las materias/paralelos del periodo y permita revisarlos
-   antes de abrir inscripciones?
+1. **Planificación de oferta:** implementado el espacio de trabajo por periodo,
+   carrera y plan. El calendario permanece visible al editar un paralelo y se
+   filtra por facultad, carrera, plan, docente y aula. Las materias del plan
+   muestran aptos, repetidores, bloqueados y resultados sin nota, calculados
+   con calificaciones de periodos terminados antes del objetivo. La misma
+   versión del plan admite varios grupos de ingreso y se proyectan sus
+   semestres curriculares. La inscripción ya exige que los prerrequisitos se
+   hayan aprobado en un periodo anterior y la repetición espera otro periodo.
+   Falta precisar los rangos de cada bloque mensual MODULAR, el retiro de una
+   oferta con historial y la continuidad de un plan anterior cuando se publica
+   una versión nueva. Si se aprueba el visto bueno administrativo de notas,
+   habrá que ajustar qué resultados cuentan para la propuesta y la inscripción.
 2. **Habilitaciones:** ¿se mantienen manuales por estudiante como ahora o se
    necesita seleccionar/habilitar un conjunto de estudiantes? Si se desea
    automatizarlas, falta definir la regla académica; no asumir que todos quedan
@@ -123,9 +131,8 @@ intercambiables:
   existe, sin embargo, un campo o entidad explícita para numerar/nombrar cada
   módulo mensual.
 - La interfaz separa **Periodos** y **Paralelos** dentro de Gestión académica;
-  la pantalla de periodos se limita a denominación, fechas y feriados. No hay un
-  flujo guiado que conecte creación del periodo, programación de materias,
-  asignación de docentes, revisión de la oferta y apertura.
+  el flujo actual guía la selección de carreras y planes, muestra materias del
+  plan y abre el calendario semanal en la misma pantalla de oferta.
 
 **Decisión confirmada y aplicada en la interfaz/documentación:** mantener
 separados el semestre curricular y el periodo académico en el dominio; usar un
@@ -133,5 +140,5 @@ periodo semestral común para ambas modalidades y delimitar los bloques modulare
 por fechas de paralelo dentro de ese periodo. La navegación ahora presenta una
 planificación del semestre con enlaces contextuales a oferta y habilitaciones.
 No se añade una entidad/campo de módulo mensual porque las fechas del paralelo
-delimitan el bloque por ahora. Falta revisar si la oferta debe agruparse en una
-vista masiva antes de abrir inscripciones.
+delimitan el bloque por ahora. Sigue pendiente definir los límites exactos de
+los tramos modulares y el visto bueno administrativo de notas.

@@ -8,10 +8,11 @@ import "./planning.css"
 const STEPS = [
   { id: "periodos", label: "Semestre académico", href: "/admin/periodos" },
   { id: "paralelos", label: "Oferta y paralelos", href: "/admin/paralelos" },
+  { id: "recursos", label: "Aulas y turnos", href: "/admin/planificacion-config" },
   { id: "habilitaciones", label: "Habilitaciones", href: "/admin/habilitaciones" },
 ] as const
 
-export type PlanningSection = (typeof STEPS)[number]["id"]
+export type PlanningSection = (typeof STEPS)[number]["id"] | "habilitaciones"
 
 /**
  * Marco de Planificación académica. Los pasos 2 y 3 conservan el semestre elegido

@@ -182,6 +182,7 @@ class PlanPublic(BaseModel):
 
 class StudentPlanAssignment(StrictInputModel):
     plan_estudio_id: uuid.UUID
+    apertura_plan_id: uuid.UUID | None = None
 
 
 class StudentPlanPublic(BaseModel):
@@ -192,3 +193,9 @@ class StudentPlanPublic(BaseModel):
     plan_estudio_id: uuid.UUID | None
     plan_codigo: str | None
     plan_estado: EstadoPlan | None
+    apertura_plan_id: uuid.UUID | None = None
+    apertura_periodo_denominacion: str | None = None
+
+
+class StudentOpeningAssignment(StrictInputModel):
+    apertura_plan_id: uuid.UUID

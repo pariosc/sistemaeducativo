@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date
+from datetime import date, time, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -21,6 +21,7 @@ from app.modules.notifications.services.notification_service import (
     add_period_holiday_notifications,
 )
 from app.modules.parallel.models.entities import (
+    Aula,
     Curso,
     ExcepcionHorario,
     FeriadoPeriodo,
@@ -38,7 +39,7 @@ from app.modules.parallel.schemas.courses import (
     ScheduleExceptionPublic,
 )
 from app.modules.parallel.services.calendar import Occurrence, course_occurrences, first_overlap
-from app.modules.periods.models.entities import PeriodoAcademico
+from app.modules.periods.models.entities import PeriodoAcademico, PeriodoPlan
 
 
 def _course_or_404(db: Session, course_id: UUID) -> Curso:
@@ -164,6 +165,82 @@ def _validate_global_conflicts(db: Session, changed_ids: set[UUID]) -> None:
                     ),
                 )
 
+    # Classroom conflicts are checked against real dates as well: weekly slots
+    # do not conflict when their courses run in different modular blocks.
+    room_events: dict[UUID, list[tuple[date, time, time, str]]] = defaultdict(list)
+    weekday_numbers = {
+        "LUNES": 1,
+        "MARTES": 2,
+        "MIERCOLES": 3,
+        "JUEVES": 4,
+        "VIERNES": 5,
+        "SABADO": 6,
+        "DOMINGO": 7,
+    }
+    for course in courses:
+        schedules = _schedules_for(db, course.id)
+        holidays = _holidays_for(db, course.periodo_id)
+        exceptions = {item.fecha_original: item for item in _exceptions_for(db, course.id)}
+        current = course.fecha_inicio
+        while current <= course.fecha_fin:
+            if current not in holidays and current not in exceptions:
+                for slot in schedules:
+                    if slot.aula and current.isoweekday() == weekday_numbers[slot.dia_semana.value]:
+                        room_events[course.id].append(
+                            (current, slot.hora_inicio, slot.hora_fin, slot.aula)
+                        )
+            current += timedelta(days=1)
+        for exception in exceptions.values():
+            if exception.tipo.value != "REPROGRAMADA" or not exception.fecha_reprogramada:
+                continue
+            room_code = exception.aula
+            if room_code is None:
+                original_day = exception.fecha_original.isoweekday()
+                original_rooms = {
+                    slot.aula
+                    for slot in schedules
+                    if weekday_numbers[slot.dia_semana.value] == original_day and slot.aula
+                }
+                if len(original_rooms) == 1:
+                    room_code = next(iter(original_rooms))
+            if room_code and exception.hora_inicio and exception.hora_fin:
+                room_events[course.id].append(
+                    (
+                        exception.fecha_reprogramada,
+                        exception.hora_inicio,
+                        exception.hora_fin,
+                        room_code,
+                    )
+                )
+
+    ordered = [course for course in courses if course.id in changed_ids]
+    for left in ordered:
+        for right in courses:
+            if (
+                left.id == right.id
+                or right.id not in by_id
+                or not room_events[left.id]
+                or not room_events[right.id]
+            ):
+                continue
+            if str(left.id) >= str(right.id) and right in ordered:
+                continue
+            for day, start, end, room in room_events[left.id]:
+                for other_day, other_start, other_end, other_room in room_events[right.id]:
+                    if (
+                        room == other_room
+                        and day == other_day
+                        and start < other_end
+                        and other_start < end
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                f"El aula {room} tiene un cruce entre los paralelos "
+                                f"{left.paralelo} y {right.paralelo} el {day.isoformat()}"
+                            ),
+                        )
+
     active_courses = set(by_id)
     courses_by_student: dict[UUID, set[UUID]] = defaultdict(set)
     for student_id, course_id in _enrollment_rows(db):
@@ -195,6 +272,20 @@ def _lock_teachers(db: Session, teacher_ids: set[UUID | None]) -> None:
             .where(PerfilDocente.usuario_id.in_(ids))
             .order_by(PerfilDocente.usuario_id)
             .with_for_update()
+        ).all()
+
+
+def _lock_rooms(db: Session, course_ids: set[UUID]) -> None:
+    room_codes = set(
+        db.scalars(
+            select(HorarioClase.aula).where(
+                HorarioClase.curso_id.in_(course_ids), HorarioClase.aula.is_not(None)
+            )
+        ).all()
+    )
+    if room_codes:
+        db.scalars(
+            select(Aula).where(Aula.codigo.in_(room_codes)).order_by(Aula.codigo).with_for_update()
         ).all()
 
 
@@ -232,6 +323,7 @@ def _commit_with_conflict_check(db: Session, changed_ids: set[UUID]) -> None:
         db.flush()
         changed_courses = db.scalars(select(Curso).where(Curso.id.in_(changed_ids))).all()
         _lock_teachers(db, {course.docente_id for course in changed_courses})
+        _lock_rooms(db, changed_ids)
         _validate_global_conflicts(db, changed_ids)
         db.commit()
     except HTTPException:
@@ -312,12 +404,13 @@ def _course_output(db: Session, course: Curso) -> CoursePublic:
     return CoursePublic(
         id=course.id,
         materia_plan_id=course.materia_plan_id,
+        plan_id=plan.id,
+        carrera_id=career.id,
+        facultad_id=career.facultad_id,
         materia_codigo=subject.codigo,
         materia_nombre=subject.nombre,
-        plan_id=plan.id,
         plan_codigo=plan.codigo,
         plan_estado=plan.estado,
-        carrera_id=career.id,
         carrera_codigo=career.codigo,
         carrera_nombre=career.nombre,
         periodo_id=period.id,
@@ -363,6 +456,13 @@ def create_course(db: Session, payload: CourseCreate) -> CoursePublic:
     if not entry:
         raise HTTPException(status_code=404, detail="Materia del plan no encontrada")
     period = _period_or_404(db, payload.periodo_id)
+    plan = db.get(PlanEstudio, entry.plan_id)
+    if plan.estado != EstadoPlan.VIGENTE:
+        raise HTTPException(status_code=409, detail="El plan debe estar VIGENTE")
+    if not db.get(PeriodoPlan, (period.id, plan.id)):
+        raise HTTPException(
+            status_code=409, detail="Incorpora el plan al semestre antes de crear paralelos"
+        )
     if payload.fecha_inicio < period.fecha_inicio or payload.fecha_fin > period.fecha_fin:
         raise HTTPException(
             status_code=422,
@@ -422,6 +522,36 @@ def update_course(db: Session, course_id: UUID, payload: CourseUpdate) -> Course
     return _course_output(db, course)
 
 
+def validate_course_update_preview(
+    db: Session, course_id: UUID, payload: CourseUpdate
+) -> dict[str, bool]:
+    course = _course_or_404(db, course_id)
+    preview = db.begin_nested()
+    try:
+        for name, value in payload.model_dump(exclude_unset=True).items():
+            setattr(course, name, value)
+        _validate_course_period(db, course)
+        _validate_teacher(db, course.docente_id)
+        _validate_exception_bounds(db, course)
+        if course.cupo < _enrollment_count(db, course.id, active_only=True):
+            raise HTTPException(
+                status_code=409,
+                detail="El cupo no puede ser menor que la cantidad de inscripciones activas",
+            )
+        db.flush()
+        _validate_global_conflicts(db, {course.id})
+    except IntegrityError as exc:
+        preview.rollback()
+        raise HTTPException(
+            status_code=409, detail="La configuración del paralelo ya existe"
+        ) from exc
+    except Exception:
+        preview.rollback()
+        raise
+    preview.rollback()
+    return {"valido": True}
+
+
 def replace_schedules(
     db: Session, course_id: UUID, schedules: list[CourseScheduleInput]
 ) -> CoursePublic:
@@ -440,8 +570,22 @@ def replace_schedules(
             status_code=409,
             detail="Agrega al menos un horario o cierra inscripciones antes de quitar el horario",
         )
+    room_codes = {schedule.aula for schedule in schedules if schedule.aula}
+    active_rooms = (
+        set(
+            db.scalars(
+                select(Aula.codigo).where(Aula.codigo.in_(room_codes), Aula.activa.is_(True))
+            ).all()
+        )
+        if room_codes
+        else set()
+    )
+    if room_codes - active_rooms:
+        raise HTTPException(status_code=422, detail="Selecciona un aula activa del catálogo")
     for schedule in _schedules_for(db, course.id):
         db.delete(schedule)
+    # Remove existing unique keys before inserting the replacement set.
+    db.flush()
     for schedule in schedules:
         db.add(
             HorarioClase(
@@ -460,8 +604,54 @@ def replace_schedules(
     return _course_output(db, course)
 
 
+def validate_schedule_preview(
+    db: Session, course_id: UUID, schedules: list[CourseScheduleInput]
+) -> dict[str, bool]:
+    """Run the same date/resource checks as save, then roll the preview back."""
+    course = _course_or_404(db, course_id)
+    room_codes = {schedule.aula for schedule in schedules if schedule.aula}
+    active_rooms = (
+        set(
+            db.scalars(
+                select(Aula.codigo).where(Aula.codigo.in_(room_codes), Aula.activa.is_(True))
+            ).all()
+        )
+        if room_codes
+        else set()
+    )
+    if room_codes - active_rooms:
+        raise HTTPException(status_code=422, detail="Selecciona un aula activa del catálogo")
+
+    preview = db.begin_nested()
+    try:
+        for current in _schedules_for(db, course.id):
+            db.delete(current)
+        db.flush()
+        db.add_all(
+            [
+                HorarioClase(
+                    curso_id=course.id,
+                    dia_semana=item.dia_semana,
+                    hora_inicio=item.hora_inicio,
+                    hora_fin=item.hora_fin,
+                    aula=item.aula,
+                )
+                for item in schedules
+            ]
+        )
+        db.flush()
+        _validate_exception_bounds(db, course)
+        _validate_global_conflicts(db, {course.id})
+    except Exception:
+        preview.rollback()
+        raise
+    preview.rollback()
+    return {"valido": True}
+
+
 def set_registration_open(db: Session, course_id: UUID, opened: bool) -> CoursePublic:
     course = _course_or_404(db, course_id)
+    _lock_courses(db, {course.id})
     if opened:
         _validate_course_period(db, course)
         _validate_teacher(db, course.docente_id)
@@ -481,9 +671,8 @@ def set_registration_open(db: Session, course_id: UUID, opened: bool) -> CourseP
         plan = db.get(PlanEstudio, entry.plan_id)
         if plan.estado != EstadoPlan.VIGENTE:
             raise HTTPException(status_code=409, detail="El plan debe estar VIGENTE")
-        _validate_global_conflicts(db, {course.id})
     course.inscripcion_abierta = opened
-    db.commit()
+    _commit_with_conflict_check(db, {course.id})
     db.refresh(course)
     return _course_output(db, course)
 
@@ -609,6 +798,10 @@ def create_exception(
             raise HTTPException(
                 status_code=422, detail="La fecha de reemplazo debe ser distinta a la original"
             )
+    if payload.aula and not db.scalar(
+        select(Aula.codigo).where(Aula.codigo == payload.aula, Aula.activa.is_(True))
+    ):
+        raise HTTPException(status_code=422, detail="Selecciona un aula activa del catálogo")
     exception = ExcepcionHorario(curso_id=course.id, **payload.model_dump())
     db.add(exception)
     add_course_schedule_notifications(db, course)

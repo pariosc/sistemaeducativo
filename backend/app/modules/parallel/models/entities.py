@@ -35,6 +35,37 @@ class TipoExcepcionHorario(StrEnum):
     REPROGRAMADA = "REPROGRAMADA"
 
 
+class Aula(Base):
+    """Catálogo simple de aulas identificadas por el código visible en campus."""
+
+    __tablename__ = "aulas"
+    __table_args__ = (CheckConstraint("codigo = upper(codigo)", name="ck_aula_codigo_mayusculas"),)
+
+    codigo: Mapped[str] = mapped_column(String(120), primary_key=True)
+    activa: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
+class BloqueHorario(Base):
+    """Franja reusable de un turno; los horarios existentes guardan su propia hora."""
+
+    __tablename__ = "bloques_horario"
+    __table_args__ = (
+        UniqueConstraint("turno", "nombre", name="uq_bloque_turno_nombre"),
+        CheckConstraint("hora_fin > hora_inicio", name="ck_bloque_horario_intervalo_valido"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    turno: Mapped[str] = mapped_column(String(24), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(48), nullable=False)
+    hora_inicio: Mapped[time] = mapped_column(Time, nullable=False)
+    hora_fin: Mapped[time] = mapped_column(Time, nullable=False)
+    activo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class Curso(Base):
     __tablename__ = "cursos"
     __table_args__ = (
@@ -96,7 +127,9 @@ class HorarioClase(Base):
     )
     hora_inicio: Mapped[time] = mapped_column(Time, nullable=False)
     hora_fin: Mapped[time] = mapped_column(Time, nullable=False)
-    aula: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    aula: Mapped[str | None] = mapped_column(
+        String(120), ForeignKey("aulas.codigo", ondelete="RESTRICT"), nullable=True
+    )
 
 
 class FeriadoPeriodo(Base):
@@ -136,5 +169,7 @@ class ExcepcionHorario(Base):
     fecha_reprogramada: Mapped[date | None] = mapped_column(Date, nullable=True)
     hora_inicio: Mapped[time | None] = mapped_column(Time, nullable=True)
     hora_fin: Mapped[time | None] = mapped_column(Time, nullable=True)
-    aula: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    aula: Mapped[str | None] = mapped_column(
+        String(120), ForeignKey("aulas.codigo", ondelete="RESTRICT"), nullable=True
+    )
     motivo: Mapped[str | None] = mapped_column(String(240), nullable=True)

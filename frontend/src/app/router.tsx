@@ -10,6 +10,7 @@ import { CareersPage, FacultiesPage, SubjectsPage } from "../features/curriculum
 import { PlansPage } from "../features/curriculum/PlansPage"
 import { PeriodsPage } from "../features/periods/PeriodsPage"
 import { ParallelsPage } from "../features/parallel/ParallelsPage"
+import { PlanningResourcesPage } from "../features/planning/PlanningResourcesPage"
 import { AuthorizationsPage } from "../features/enrollments/AuthorizationsPage"
 import { StudentOfferPage } from "../features/enrollments/StudentOfferPage"
 import { TeacherGradesPage } from "../features/grades/TeacherGradesPage"
@@ -80,6 +81,10 @@ function ParallelsRoute() {
   return <Protected adminOnly><ParallelsPage /></Protected>
 }
 
+function PlanningResourcesRoute() {
+  return <Protected adminOnly><PlanningResourcesPage /></Protected>
+}
+
 function AuthorizationsRoute() {
   return <Protected adminOnly><AuthorizationsPage /></Protected>
 }
@@ -116,13 +121,14 @@ const subjectsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/adm
 const plansRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin/planes", component: PlansRoute })
 const periodsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin/periodos", component: PeriodsRoute })
 const parallelsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin/paralelos", component: ParallelsRoute })
+const planningResourcesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin/planificacion-config", component: PlanningResourcesRoute })
 const authorizationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin/habilitaciones", component: AuthorizationsRoute })
 const studentOfferRoute = createRoute({ getParentRoute: () => rootRoute, path: "/estudiante/oferta", component: StudentOfferRoute })
 const teacherGradesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/docente/calificaciones", component: TeacherGradesRoute })
 const studentGradesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/estudiante/calificaciones", component: StudentGradesRoute })
 const reportsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/reportes", component: ReportsRoute })
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: "/dashboard", component: DashboardRoute })
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, profileRoute, changePasswordRoute, usersRoute, careersRoute, facultiesRoute, subjectsRoute, plansRoute, periodsRoute, parallelsRoute, authorizationsRoute, studentOfferRoute, teacherGradesRoute, studentGradesRoute, reportsRoute, dashboardRoute])
+const routeTree = rootRoute.addChildren([indexRoute, loginRoute, profileRoute, changePasswordRoute, usersRoute, careersRoute, facultiesRoute, subjectsRoute, plansRoute, periodsRoute, parallelsRoute, planningResourcesRoute, authorizationsRoute, studentOfferRoute, teacherGradesRoute, studentGradesRoute, reportsRoute, dashboardRoute])
 const router = createRouter({ routeTree })
 
 export function AppRouter() {

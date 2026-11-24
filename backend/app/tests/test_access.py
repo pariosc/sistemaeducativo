@@ -194,7 +194,7 @@ async def test_common_admin_cannot_create_or_view_administrators(client, origin_
     assert all(user["rol"] != "ADMINISTRADOR" for user in visible.json())
 
 
-async def test_profile_only_updates_own_phone_and_student_cannot_list_users(client, origin_headers):
+async def test_student_profile_is_read_only_and_admin_can_update_own_phone(client, origin_headers):
     await sign_in(client)
     created = await client.post(
         "/api/v1/admin/users",
@@ -226,10 +226,47 @@ async def test_profile_only_updates_own_phone_and_student_cannot_list_users(clie
         json={"telefono": "71112222", "ci": "9999999"},
         headers=origin_headers,
     )
-    assert updated.status_code == 200
-    assert updated.json()["telefono"] == "71112222"
-    assert updated.json()["ci"] == "8887776"
+    assert updated.status_code == 403
+    assert (await client.get("/api/v1/profile/me")).json()["telefono"] == "70000004"
     assert (await client.get("/api/v1/admin/users")).status_code == 403
+
+    client.cookies.clear()
+    await sign_in(client)
+    admin_update = await client.patch(
+        "/api/v1/profile/me", json={"telefono": "71112222"}, headers=origin_headers
+    )
+    assert admin_update.status_code == 200
+    assert admin_update.json()["telefono"] == "71112222"
+
+    teacher = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "8887775",
+            "nombres": "Carlos",
+            "apellidos": "Docente",
+            "correo": "carlos@example.edu",
+            "telefono": "70000007",
+            "rol": "DOCENTE",
+        },
+        headers=origin_headers,
+    )
+    teacher_account = teacher.json()
+    client.cookies.clear()
+    await sign_in(client, "carlos@example.edu", teacher_account["contrasena_temporal"])
+    await client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "contrasena_actual": teacher_account["contrasena_temporal"],
+            "contrasena_nueva": "ClaveDocenteNueva2026!",
+        },
+        headers=origin_headers,
+    )
+    client.cookies.clear()
+    await sign_in(client, "carlos@example.edu", "ClaveDocenteNueva2026!")
+    teacher_update = await client.patch(
+        "/api/v1/profile/me", json={"telefono": "71112223"}, headers=origin_headers
+    )
+    assert teacher_update.status_code == 403
 
 
 async def test_admin_can_correct_user_identity_without_duplicate_ci(client, origin_headers):
@@ -264,12 +301,18 @@ async def test_admin_can_correct_user_identity_without_duplicate_ci(client, orig
 
     updated = await client.patch(
         f"/api/v1/admin/users/{target['id']}",
-        json={"ci": "3333333", "nombres": "Ana María", "apellidos": "Actualizada"},
+        json={
+            "ci": "3333333",
+            "nombres": "Ana María",
+            "apellidos": "Actualizada",
+            "telefono": "71112224",
+        },
         headers=origin_headers,
     )
     assert updated.status_code == 200
     assert updated.json()["ci"] == "3333333"
     assert updated.json()["nombres"] == "Ana María"
+    assert updated.json()["telefono"] == "71112224"
     duplicate_ci = await client.patch(
         f"/api/v1/admin/users/{target['id']}",
         json={"ci": other.json()["ci"]},

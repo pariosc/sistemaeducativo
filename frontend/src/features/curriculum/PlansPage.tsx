@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent, KeyboardEvent, RefObject } from "react"
 
 import { api } from "../../api/client"
-import type { Career, PlanModality, PlanState, PlanSubject, PlanUnit, StudentPlan, StudyPlan, Subject } from "../../api/client"
+import type { Career, PlanModality, PlanOpening, PlanState, PlanSubject, PlanUnit, StudentPlan, StudyPlan, Subject } from "../../api/client"
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
@@ -246,8 +246,8 @@ export function PlansPage() {
         )
       }
       case "assign-student":
-        return <AssignStudentDialog {...common} plan={plan} students={students} onSubmit={(student) => void submitDialog(
-          () => api.assignStudentPlan(student.usuario_id, plan.id),
+        return <AssignStudentDialog {...common} plan={plan} students={students} onSubmit={(student, openingId) => void submitDialog(
+          () => api.assignStudentPlan(student.usuario_id, plan.id, openingId),
           `${fullName(student)} fue asignado al plan ${plan.codigo}.`,
         )} />
       default:
@@ -627,8 +627,8 @@ function StudentsPanel({ plan, assigned, actions }: { plan: StudyPlan; assigned:
           <div className="ui-table-wrap">
             <table className="ui-table">
               <caption className="ui-visually-hidden">Estudiantes asignados al plan {plan.codigo}</caption>
-              <thead><tr><th scope="col">Estudiante</th><th scope="col">CI</th></tr></thead>
-              <tbody>{assigned.map((student) => <tr key={student.usuario_id}><td className="ui-cell-strong">{fullName(student)}</td><td>{student.ci}</td></tr>)}</tbody>
+              <thead><tr><th scope="col">Estudiante</th><th scope="col">CI</th><th scope="col">Grupo de ingreso</th></tr></thead>
+              <tbody>{assigned.map((student) => <tr key={student.usuario_id}><td className="ui-cell-strong">{fullName(student)}</td><td>{student.ci}</td><td>{student.apertura_periodo_denominacion ?? "Sin asignar"}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -900,9 +900,26 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
   )
 }
 
-function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; students: StudentPlan[]; onSubmit: (student: StudentPlan) => void }) {
+function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; students: StudentPlan[]; onSubmit: (student: StudentPlan, openingId?: string) => void }) {
   const [studentId, setStudentId] = useState("")
+  const [openingId, setOpeningId] = useState("")
+  const [openings, setOpenings] = useState<PlanOpening[]>([])
   const [localError, setLocalError] = useState("")
+  const [loadingOpenings, setLoadingOpenings] = useState(true)
+  const [openingsError, setOpeningsError] = useState("")
+  useEffect(() => {
+    let cancelled = false
+    setLoadingOpenings(true)
+    setOpeningsError("")
+    void api.listPlanOpenings(plan.id).then((rows) => {
+      if (!cancelled) setOpenings(rows)
+    }).catch((reason: Error) => {
+      if (!cancelled) setOpeningsError(reason.message)
+    }).finally(() => {
+      if (!cancelled) setLoadingOpenings(false)
+    })
+    return () => { cancelled = true }
+  }, [plan.id])
   const candidates = students
     .filter((student) => student.plan_estudio_id !== plan.id)
     .sort((a, b) => Number(Boolean(a.plan_estudio_id)) - Number(Boolean(b.plan_estudio_id)) || a.apellidos.localeCompare(b.apellidos, "es"))
@@ -922,17 +939,24 @@ function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }:
         event.preventDefault()
         const student = candidates.find((candidate) => candidate.usuario_id === studentId)
         if (!student) { setLocalError("Selecciona un estudiante."); return }
+        if (openings.length > 0 && !openingId) { setLocalError("Selecciona el grupo de ingreso del estudiante."); return }
         setLocalError("")
-        onSubmit(student)
+        onSubmit(student, openingId || undefined)
       }}>
-        <DialogError error={error || localError} />
+        <DialogError error={error || openingsError || localError} />
         <Field id="student-pick" label="Estudiante">
           <select id="student-pick" className="ui-select" value={studentId} onChange={(event) => { setStudentId(event.target.value); setLocalError("") }} required aria-invalid={Boolean(localError)} data-autofocus="">
             <option value="">Selecciona un estudiante</option>
             {candidates.map((student) => <option key={student.usuario_id} value={student.usuario_id}>{fullName(student)} — CI {student.ci} · {student.plan_codigo ? `Plan actual: ${student.plan_codigo}` : "Sin plan"}</option>)}
           </select>
         </Field>
-        <FormActions busy={busy} onClose={onClose} submitLabel="Asignar plan" icon="check" />
+        {loadingOpenings ? <p className="ui-field-hint">Cargando grupos de ingreso…</p> : openings.length > 0 ? <Field id="student-opening" label="Grupo de ingreso" hint="Ubica al estudiante en la proyección de semestres de este plan.">
+          <select id="student-opening" className="ui-select" value={openingId} onChange={(event) => { setOpeningId(event.target.value); setLocalError("") }} required>
+            <option value="">Selecciona un grupo</option>
+            {openings.map((opening) => <option key={opening.id} value={opening.id}>Ingreso {opening.periodo_denominacion}</option>)}
+          </select>
+        </Field> : <p className="ui-field-hint">Este plan aún no tiene grupos de ingreso. Podrás asignar el grupo desde «Planificar semestre» cuando lo inicies.</p>}
+        <FormActions busy={busy || loadingOpenings || Boolean(openingsError)} onClose={onClose} submitLabel="Asignar plan" icon="check" />
       </form>
     </Modal>
   )

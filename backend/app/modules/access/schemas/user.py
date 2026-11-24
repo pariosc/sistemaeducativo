@@ -72,6 +72,7 @@ class UserUpdate(StrictInputModel):
     ci: CI | None = None
     nombres: PersonName | None = None
     apellidos: PersonName | None = None
+    telefono: Phone | None = None
     activo: StrictFlag | None = None
 
     @model_validator(mode="after")

@@ -2,7 +2,7 @@
 
 Estado preparado el 18-11-2026 a partir de las pruebas funcionales T01–T43
 del contexto del proyecto y la suite automatizada disponible. La suite actual
-contiene dieciséis pruebas y aún no representa cobertura completa de T01–T43.
+contiene veintiocho pruebas y aún no representa cobertura completa de T01–T43.
 
 ## Cobertura automatizada observada
 
@@ -12,10 +12,10 @@ contiene dieciséis pruebas y aún no representa cobertura completa de T01–T43
 | T02 — Deshabilitar cuentas | `test_invalid_and_inactive_accounts_cannot_sign_in` | Parcial: una cuenta inactiva no inicia sesión. Falta conservación del historial y permisos para inactivar cuentas administrativas/principal. |
 | T03 — Corregir identidad | `test_admin_can_correct_user_identity_without_duplicate_ci` | Edita CI y nombres; rechaza CI duplicado. |
 | T04 — Iniciar sesión | `test_login_with_email_and_ci_and_logout_revokes_session`; `test_invalid_and_inactive_accounts_cannot_sign_in` | Parcial: login con CI/correo, credenciales inválidas y cuenta inactiva. |
-| T05 — Aplicar permisos | `test_common_admin_cannot_create_or_view_administrators`; `test_profile_only_updates_own_phone_and_student_cannot_list_users` | Parcial: restricciones de administración y lista de usuarios. |
+| T05 — Aplicar permisos | `test_common_admin_cannot_create_or_view_administrators`; `test_student_profile_is_read_only_and_admin_can_update_own_phone` | Parcial: restricciones de administración y perfil de estudiante de solo lectura. |
 | T06 — Cerrar sesión | `test_login_with_email_and_ci_and_logout_revokes_session` | Cierra sesión, revoca cookie y rechaza la siguiente consulta autenticada. |
-| T07 — Consultar perfil | `test_profile_only_updates_own_phone_and_student_cannot_list_users` | Estudiante autenticada consulta su perfil propio. |
-| T08 — Actualizar teléfono | `test_profile_only_updates_own_phone_and_student_cannot_list_users` | Actualiza teléfono propio e ignora CI enviado en el mismo payload. |
+| T07 — Consultar perfil | `test_student_profile_is_read_only_and_admin_can_update_own_phone` | Estudiante autenticada consulta su perfil propio. |
+| T08 — Actualizar teléfono | `test_student_profile_is_read_only_and_admin_can_update_own_phone`; `test_admin_can_correct_user_identity_without_duplicate_ci` | Rechaza cambios de perfil para docente y estudiante; permite al administrador editar su teléfono propio y corregir el de las cuentas administradas. |
 | T09 — Cambiar contraseña | `test_change_temporary_password_blocks_other_operations_and_revokes_session` | Parcial: cambio temporal, bloqueo previo, revocación de sesión y nuevo login. |
 | T10 — Restablecer contraseña | `test_reset_password_revokes_old_sessions_and_forces_change`; `test_change_temporary_password_blocks_other_operations_and_revokes_session` | Parcial: clave temporal, revocación y obligación de cambio. |
 | T11 — Gestionar facultades y carreras | `test_career_lifecycle_and_restrictions` | Parcial: facultad requerida, relación carrera-facultad, ciclos de vida y bloqueo de eliminación de facultad con carreras. |
@@ -25,14 +25,14 @@ contiene dieciséis pruebas y aún no representa cobertura completa de T01–T43
 | T15 — Eliminar materias | `test_subject_lifecycle_and_delete_only_when_unreferenced` | Rechaza borrado vinculada al plan y permite borrado después de retirarla. |
 | T16 — Organizar materias | `test_plan_units_subjects_prerequisites_and_published_structure` | Parcial: altas, duplicados, unidad ajena, movimiento y bloqueo estructural. |
 | T17 — Prerrequisitos | `test_plan_units_subjects_prerequisites_and_published_structure` | Agrega y retira vínculo; rechaza ciclo. Falta referencia a otro plan. |
-| T18 — Asignar plan a estudiante | `test_student_plan_assignment_and_listing`; `test_offer_enrollment_dashboard_and_schedule_notifications` | Asigna y consulta; rechaza cambiarlo después de una inscripción activa. |
-| T19 — Registrar periodos | `test_period_dates_and_course_must_fit_period` | Rechaza fecha final anterior a inicio. |
-| T20 — Crear paralelos | `test_period_dates_and_course_must_fit_period`; `test_parallel_teacher_schedule_conflict_is_rejected` | Parcial: fecha fuera del periodo y cruce de docente. |
-| T21 — Modificar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it`; `test_parallel_teacher_schedule_conflict_is_rejected` | Parcial: inactivación/cierre, reactivación sin reapertura y rechazo de cruce docente. |
+| T18 — Asignar plan a estudiante | `test_student_plan_assignment_and_listing`; `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Asigna y consulta; rechaza cambiarlo después de una inscripción activa. Vincula estudiantes a un grupo de ingreso de su plan. |
+| T19 — Registrar periodos | `test_period_dates_and_course_must_fit_period`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Rechaza fecha final anterior a inicio; incorpora carrera y plan por periodo y proyecta dos inicios del mismo plan. |
+| T20 — Crear paralelos | `test_period_dates_and_course_must_fit_period`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Parcial: fechas, docente, aula, feriados, cancelación y reprogramación; requiere plan incorporado al periodo. Prevalidación devuelve conflictos sin guardar. |
+| T21 — Modificar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_schedule_update_rejects_new_overlap_for_an_enrolled_student`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Parcial: estado/apertura, docente, aula, estudiante inscrito, reprogramación y rangos modulares disjuntos. La vista previa de fechas detecta choque docente y no persiste. Falta probar concurrencia de recursos en PostgreSQL. |
 | T22 — Eliminar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it` | Elimina paralelo sin inscripciones. Falta bloqueo de borrado con historial. |
 | T23 — Abrir/cerrar inscripción | `test_course_registration_requires_setup_and_inactivation_closes_it` | Rechaza abrir sin horario y permite abrir cuando la configuración es válida; falta probar todas las precondiciones. |
-| T24 — Consultar oferta | `test_offer_enrollment_dashboard_and_schedule_notifications` | Parcial: el código ahora muestra semestre y prerrequisitos pendientes y deshabilita la acción; falta cobertura funcional específica de estos comportamientos. |
-| T25 — Inscribirse | `test_offer_enrollment_dashboard_and_schedule_notifications` | Parcial: inscripción válida y rechazo de duplicado; la regla de prerrequisitos está implementada en backend, pero falta probar su rechazo, adelanto con requisitos aprobados, repetición, cupo, cruces y concurrencia. |
+| T24 — Consultar oferta | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Muestra semestre y prerrequisitos pendientes; una nota del mismo periodo sigue pendiente para otra materia, mientras en el siguiente periodo se reconoce. Faltan otros escenarios de oferta. |
+| T25 — Inscribirse | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Inscripción válida, rechazo de duplicado y de prerrequisito del mismo periodo, avance y repetición en uno posterior. Faltan cupo límite y concurrencia. |
 | T26 — Consultar paralelos | `test_offer_enrollment_dashboard_and_schedule_notifications` | Admin, estudiante y docente consultan cursos según su relación. |
 | T27 — Registrar calificación | `test_offer_enrollment_dashboard_and_schedule_notifications` | Docente asignado registra 51; rechaza nota 101. |
 | T28 — Corregir calificación | `test_offer_enrollment_dashboard_and_schedule_notifications` | Rechaza duplicar el registro y permite corregir a 50. Falta probar docente ajeno. |
@@ -75,6 +75,35 @@ calendario, inscripción, notas, panel, avisos, único administrador principal y
 exportación de los ocho reportes en PDF/XLSX. La suite completa pasó 18/18 en
 SQLite y en PostgreSQL. Los flujos de cuentas temporales mantienen cobertura de
 cambio obligatorio.
+
+## Ejecución del 23-11-2026
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest app/tests` | 26 aprobadas | SQLite en memoria; incluye 3 unitarias de calendario y pruebas API para recursos, permisos, prevalidación sin persistencia, conflictos de docente/aula/estudiante, feriados, excepciones, bloques y apertura del paralelo. No representa concurrencia PostgreSQL. |
+| `ruff check app migrations` | Aprobado | Backend completo. |
+| `bun run typecheck` | Aprobado | React/TypeScript. |
+| `bun run build` | Aprobado | Vite; persisten dos avisos de anotaciones Zod y el aviso de bundle mayor a 500 kB. Requirió Node 24 disponible en PATH para iniciar esbuild. |
+| `alembic heads` | Un head: `0009_planificacion_recursos` | La migración 0009 depende de `0008_facultades`. |
+| `alembic upgrade 0008_facultades:head --sql` | SQL PostgreSQL generado | Revisó la migración nueva sin ejecutar cambios. No se aplicó a la base local. |
+| PostgreSQL local | Migración y consultas ORM verificadas | Se aplicó `0009_planificacion_recursos` desde `0008_facultades`; `alembic current` confirmó `0009`. Las consultas de catálogo respondieron con 4 aulas existentes y 0 bloques. Las rutas sin sesión respondieron 401 como corresponde. Concurrencia y suite completa sobre PostgreSQL no fueron ejecutadas. |
+
+## Ejecución posterior del 23-11-2026
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 28 aprobadas en SQLite y 28 en PostgreSQL | PostgreSQL usó una base temporal aislada, creada solo para la corrida y eliminada al terminar. La prueba nueva se ejecuta en modalidades MODULAR y SEMESTRAL. |
+| `ruff check app migrations`; `ruff format --check app migrations` | Aprobados | Backend completo y migraciones. |
+| `bun run build` | Aprobado | TypeScript y Vite con Node 24 en PATH; persisten avisos de comentarios Zod y tamaño del bundle. |
+| `alembic upgrade head`; `alembic current`; `alembic check` | Aprobados | PostgreSQL local actualizado de `0009` a `0010_aperturas_plan`; Alembic no detectó cambios de esquema pendientes. |
+| Revisión visual autenticada | Pendiente | El navegador disponible llegó a `/login` sin una sesión administrativa. |
+
+Tras ajustar la sugerencia para que un grupo sin estudiantes aptos no marque
+materias como recomendadas y verificar la asignación conjunta de plan y grupo,
+se repitieron las 28 pruebas SQLite y las 2 variantes MODULAR/SEMESTRAL de
+`test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period`
+en una nueva base PostgreSQL temporal. También aprobaron Ruff, el formato y
+la compilación TypeScript/Vite.
 
 ## Pendientes de regresión
 

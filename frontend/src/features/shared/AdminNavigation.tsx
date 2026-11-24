@@ -40,6 +40,7 @@ export function AdminNavigation() {
         { title: "Planificación académica", entries: [
           { label: "Planificar semestre", href: "/admin/periodos" },
           { label: "Oferta y paralelos", href: "/admin/paralelos" },
+          { label: "Aulas y turnos", href: "/admin/planificacion-config" },
           { label: "Habilitaciones", href: "/admin/habilitaciones" },
         ] },
         { title: "Consultas", entries: [{ label: "Reportes", href: "/reportes" }] },
