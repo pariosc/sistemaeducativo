@@ -539,3 +539,50 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   porque la prueba de integración quedaba esperando en la primera consulta de
   exportación. Con el ajuste, aprobaron 28 pruebas backend, Ruff y la
   compilación TypeScript/Vite. Falta revisión visual autenticada.
+
+## Currículo — integridad, validaciones y usabilidad — 24-11-2026
+
+- Se reforzó la publicación de planes: no se permite publicar ni reactivar un
+  plan sin semestres con materias, con numeración no consecutiva desde 1, con
+  semestres vacíos o con carrera, facultad o materias inactivas. El backend
+  devuelve diagnósticos tipados (errores y advertencias) y la interfaz los
+  muestra antes de intentar el cambio de estado.
+- Un prerrequisito ubicado en el mismo semestre o en uno posterior se informa
+  como advertencia y no bloquea la publicación. Se conserva la regla confirmada
+  de que el semestre curricular no limita retomar materias pendientes ni
+  adelantar materias posteriores.
+- Una materia incorporada a un plan VIGENTE no puede inactivarse mientras ese
+  plan siga vigente; el mensaje indica desactivar el plan o preparar una nueva
+  versión sin la materia. La regla es coherente con la inactivación de carreras
+  y facultades.
+- Una carrera puede conservar su facultad inactiva al editar otros datos, pero
+  no puede moverse a una facultad inactiva ni reactivarse mientras su facultad
+  siga inactiva. Se rechaza crear planes para carreras o facultades inactivas.
+- La asignación de plan admite BORRADOR o VIGENTE con carrera y facultad
+  activas; un plan INACTIVO no admite nuevas asignaciones. El cambio sigue
+  bloqueado cuando el estudiante ya tiene inscripciones.
+- Se añadieron herramientas de trabajo: duplicación de un plan con semestres,
+  materias y prerrequisitos en un nuevo BORRADOR; generación de varios
+  semestres consecutivos; renumeración 1..N; carga masiva de materias con
+  búsqueda, selección múltiple y aviso de materias compartidas; y detección de
+  candidatos a prerrequisito que evita ciclos y muestra si la materia está en un
+  semestre posterior.
+- El catálogo muestra uso por materia (planes, planes vigentes, carreras y
+  ofertas), filtros por texto y estado, y deshabilita acciones destructivas con
+  el motivo visible. La malla curricular resalta relaciones, materias inactivas
+  y observaciones, y permite mover materias arrastrando o desde el detalle.
+- Se agregaron los endpoints `POST /plans/{id}/duplicate`,
+  `POST /plans/{id}/units/generate`, `POST /plans/{id}/units/renumber` y
+  `POST /plans/{id}/subjects/bulk`. La migración
+  `0011_curriculum_integrity` agrega un índice sobre `materias_plan.materia_id`;
+  **no se aplicó a la base principal** y requiere autorización explícita antes
+  de ejecutar `alembic upgrade head`.
+- Verificación ejecutada: 34 pruebas backend aprobaron en SQLite, entre ellas
+  publicación con estructura incompleta, renumeración, duplicación, carga
+  masiva, inactivación de materia en plan vigente y rechazo de asignación a
+  plan inactivo. Ruff aprobó `app` y `migrations`; `tsc -b` y el build de Vite
+  aprobaron con los avisos preexistentes de Zod y tamaño de bundle. No se
+  realizó revisión visual autenticada ni prueba de concurrencia en PostgreSQL.
+- **Secciones del informe a revisar:** RN04–RN08, RF11–RF18, HU08–HU13,
+  P04–P06, T11–T18, modelo físico (índice de materias del plan) y capturas de
+  facultades, carreras, materias y planes.

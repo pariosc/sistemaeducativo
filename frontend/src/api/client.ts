@@ -34,26 +34,52 @@ export interface Career {
   facultad_id: string
   facultad_codigo: string
   facultad_nombre: string
+  facultad_activa: boolean
   activo: boolean
+  planes_count: number
+  planes_vigentes_count: number
+  materias_count: number
+  estudiantes_count: number
 }
 
-export interface Faculty { id: string; codigo: string; nombre: string; activo: boolean }
+export interface Faculty {
+  id: string
+  codigo: string
+  nombre: string
+  activo: boolean
+  carreras_count: number
+  carreras_activas_count: number
+  planes_count: number
+}
 
 export interface Subject {
   id: string
   codigo: string
   nombre: string
   activo: boolean
+  planes_count: number
+  planes_vigentes_count: number
+  carreras_count: number
+  ofertas_count: number
 }
 
 export type PlanModality = "MODULAR" | "SEMESTRAL"
 export type PlanState = "BORRADOR" | "VIGENTE" | "INACTIVO"
+
+export interface PlanDiagnostic {
+  tipo: "error" | "warning"
+  codigo: string
+  mensaje: string
+  unidad_id: string | null
+  materia_plan_id: string | null
+}
 
 export interface PlanSubject {
   id: string
   materia_id: string
   codigo: string
   nombre: string
+  activo: boolean
   prerrequisitos: string[]
 }
 
@@ -70,9 +96,15 @@ export interface StudyPlan {
   carrera_id: string
   carrera_codigo: string
   carrera_nombre: string
+  carrera_activa: boolean
+  facultad_activa: boolean
   codigo: string
   modalidad: PlanModality
   estado: PlanState
+  total_semestres: number
+  total_materias: number
+  puede_publicarse: boolean
+  diagnosticos: PlanDiagnostic[]
   unidades: PlanUnit[]
 }
 
@@ -329,17 +361,25 @@ export const api = {
   listPlans: () => request<StudyPlan[]>("/api/v1/admin/plans"),
   createPlan: (data: { carrera_id: string; codigo: string; modalidad: PlanModality }) =>
     request<StudyPlan>("/api/v1/admin/plans", { method: "POST", body: JSON.stringify(data) }),
+  duplicatePlan: (id: string, codigo: string) =>
+    request<StudyPlan>(`/api/v1/admin/plans/${id}/duplicate`, { method: "POST", body: JSON.stringify({ codigo }) }),
   updatePlan: (id: string, data: { codigo?: string; estado?: PlanState }) =>
     request<StudyPlan>(`/api/v1/admin/plans/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deletePlan: (id: string) => request<void>(`/api/v1/admin/plans/${id}`, { method: "DELETE" }),
   createPlanUnit: (planId: string, data: { numero: number; nombre: string }) =>
     request<PlanUnit>(`/api/v1/admin/plans/${planId}/units`, { method: "POST", body: JSON.stringify(data) }),
+  generatePlanUnits: (planId: string, data: { cantidad: number; nombre_base?: string }) =>
+    request<StudyPlan>(`/api/v1/admin/plans/${planId}/units/generate`, { method: "POST", body: JSON.stringify(data) }),
+  renumberPlanUnits: (planId: string) =>
+    request<StudyPlan>(`/api/v1/admin/plans/${planId}/units/renumber`, { method: "POST" }),
   updatePlanUnit: (planId: string, unitId: string, data: { numero?: number; nombre?: string }) =>
     request<PlanUnit>(`/api/v1/admin/plans/${planId}/units/${unitId}`, { method: "PATCH", body: JSON.stringify(data) }),
   deletePlanUnit: (planId: string, unitId: string) =>
     request<void>(`/api/v1/admin/plans/${planId}/units/${unitId}`, { method: "DELETE" }),
   addPlanSubject: (planId: string, data: { materia_id: string; unidad_id: string }) =>
     request<StudyPlan>(`/api/v1/admin/plans/${planId}/subjects`, { method: "POST", body: JSON.stringify(data) }),
+  addPlanSubjectsBulk: (planId: string, data: { materia_ids: string[]; unidad_id: string }) =>
+    request<StudyPlan>(`/api/v1/admin/plans/${planId}/subjects/bulk`, { method: "POST", body: JSON.stringify(data) }),
   movePlanSubject: (planId: string, subjectPlanId: string, unidad_id: string) =>
     request<StudyPlan>(`/api/v1/admin/plans/${planId}/subjects/${subjectPlanId}`, { method: "PATCH", body: JSON.stringify({ unidad_id }) }),
   removePlanSubject: (planId: string, subjectPlanId: string) =>

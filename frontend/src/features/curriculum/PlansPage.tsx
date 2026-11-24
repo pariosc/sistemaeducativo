@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent, KeyboardEvent, RefObject } from "react"
 
 import { api } from "../../api/client"
-import type { Career, PlanModality, PlanOpening, PlanState, PlanSubject, PlanUnit, StudentPlan, StudyPlan, Subject } from "../../api/client"
+import type { Career, PlanDiagnostic, PlanModality, PlanOpening, PlanState, PlanSubject, PlanUnit, StudentPlan, StudyPlan, Subject } from "../../api/client"
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
@@ -21,9 +21,9 @@ const MODALITY_HELP: Record<PlanModality, string> = {
   SEMESTRAL: "Las materias se cursan en conjunto durante el semestre.",
   MODULAR: "Las materias se cursan en bloques mensuales.",
 }
-// Transiciones de estado permitidas (idénticas a las de la pantalla original).
 const NEXT_STATES: Record<PlanState, PlanState[]> = { BORRADOR: ["VIGENTE", "INACTIVO"], VIGENTE: ["INACTIVO"], INACTIVO: ["VIGENTE"] }
 const STATE_ACTION: Record<PlanState, string> = { BORRADOR: "Publicar plan", VIGENTE: "Desactivar plan", INACTIVO: "Reactivar plan" }
+const MAX_BULK_SUBJECTS = 50
 
 type TabId = "map" | "students"
 const TABS: { id: TabId; label: string }[] = [
@@ -35,7 +35,9 @@ type Dialog =
   | { kind: "create-plan" }
   | { kind: "edit-plan" }
   | { kind: "plan-state" }
+  | { kind: "duplicate-plan" }
   | { kind: "add-unit" }
+  | { kind: "generate-units" }
   | { kind: "edit-unit"; unit: PlanUnit }
   | { kind: "add-subject"; unit: PlanUnit }
   | { kind: "manage-subject"; subjectId: string }
@@ -47,12 +49,25 @@ interface PlanActions {
   deletePlan: () => void
   deleteUnit: (unit: PlanUnit) => void
   moveSubject: (subjectId: string, unit: PlanUnit) => void
+  renumber: () => void
+}
+
+interface PrerequisiteCandidate {
+  id: string
+  label: string
+  later: boolean
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 const fullName = (student: StudentPlan) => `${student.apellidos}, ${student.nombres}`
 const sortedUnits = (plan: StudyPlan) => [...plan.unidades].sort((a, b) => a.numero - b.numero)
 const allSubjectsOf = (plan: StudyPlan) => plan.unidades.flatMap((unit) => unit.materias)
+const errorsOf = (plan: StudyPlan) => plan.diagnosticos.filter((item) => item.tipo === "error")
+const warningsOf = (plan: StudyPlan) => plan.diagnosticos.filter((item) => item.tipo === "warning")
+const issueSubjectIds = (plan: StudyPlan) => new Set(plan.diagnosticos.flatMap((item) => (item.materia_plan_id ? [item.materia_plan_id] : [])))
+const nextUnitNumber = (plan: StudyPlan) => plan.unidades.reduce((max, unit) => Math.max(max, unit.numero), 0) + 1
+const numbersAreContiguous = (plan: StudyPlan) => sortedUnits(plan).every((unit, index) => unit.numero === index + 1)
+const copyCode = (code: string) => `${code.slice(0, 32 - "-COPIA".length)}-COPIA`
 
 function findSubject(plan: StudyPlan, subjectId: string) {
   for (const unit of plan.unidades) {
@@ -65,18 +80,62 @@ function findSubject(plan: StudyPlan, subjectId: string) {
 function planStats(plan: StudyPlan) {
   const subjects = allSubjectsOf(plan)
   return {
-    semesters: plan.unidades.length,
-    subjects: subjects.length,
+    semesters: plan.total_semestres,
+    subjects: plan.total_materias,
     prerequisites: subjects.reduce((total, subject) => total + subject.prerrequisitos.length, 0),
   }
 }
 
-function prerequisiteCandidates(plan: StudyPlan, subject: PlanSubject) {
-  return sortedUnits(plan).flatMap((unit) =>
-    unit.materias
-      .filter((candidate) => candidate.id !== subject.id && !subject.prerrequisitos.includes(candidate.id))
-      .map((candidate) => ({ id: candidate.id, label: `${candidate.codigo} — ${candidate.nombre} (Semestre ${unit.numero})` })),
-  )
+function planReadiness(plan: StudyPlan) {
+  const errors = errorsOf(plan).length
+  const warnings = warningsOf(plan).length
+  if (errors) return { tone: "error", label: `${plural(errors, "error", "errores")} para publicar` }
+  if (warnings) return { tone: "warning", label: `${plural(warnings, "advertencia", "advertencias")} por revisar` }
+  if (plan.estado === "BORRADOR") return { tone: "ok", label: "Listo para publicar" }
+  if (plan.estado === "VIGENTE") return { tone: "ok", label: "En uso" }
+  return { tone: "muted", label: "Fuera de uso" }
+}
+
+/**
+ * Materias que pueden agregarse como prerrequisito sin crear un ciclo.
+ * Se excluyen la propia materia, las que ya son requisito y todas las que
+ * dependen directa o indirectamente de ella (agregarlas cerraría el ciclo).
+ */
+function prerequisiteCandidates(plan: StudyPlan, subject: PlanSubject): PrerequisiteCandidate[] {
+  const subjects = allSubjectsOf(plan)
+  const semesterById = new Map<string, number>()
+  for (const unit of plan.unidades) for (const candidate of unit.materias) semesterById.set(candidate.id, unit.numero)
+  const reverse = new Map<string, string[]>()
+  for (const candidate of subjects) {
+    for (const requirementId of candidate.prerrequisitos) {
+      const dependents = reverse.get(requirementId) ?? []
+      dependents.push(candidate.id)
+      reverse.set(requirementId, dependents)
+    }
+  }
+  const blocked = new Set<string>([subject.id])
+  const pending = [subject.id]
+  while (pending.length > 0) {
+    const current = pending.pop() as string
+    for (const dependentId of reverse.get(current) ?? []) {
+      if (!blocked.has(dependentId)) {
+        blocked.add(dependentId)
+        pending.push(dependentId)
+      }
+    }
+  }
+  const subjectSemester = semesterById.get(subject.id) ?? 0
+  return subjects
+    .filter((candidate) => !blocked.has(candidate.id) && !subject.prerrequisitos.includes(candidate.id))
+    .map((candidate) => {
+      const semester = semesterById.get(candidate.id) ?? 0
+      return {
+        id: candidate.id,
+        label: `${candidate.codigo} — ${candidate.nombre} (Semestre ${semester})`,
+        later: semester > subjectSemester,
+      }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, "es"))
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,9 +157,11 @@ export function PlansPage() {
   const [loading, setLoading] = useState(true)
   const [filterText, setFilterText] = useState("")
   const [filterState, setFilterState] = useState<"" | PlanState>("")
+  const [filterCareer, setFilterCareer] = useState("")
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const selectedPlan = useMemo(() => plans.find((plan) => plan.id === selectedId) ?? null, [plans, selectedId])
+  const eligibleCareers = useMemo(() => careers.filter((career) => career.activo && career.facultad_activa), [careers])
 
   async function reload() {
     const [careerData, subjectData, planData, studentData] = await Promise.all([
@@ -165,6 +226,16 @@ export function PlansPage() {
     if (ok) { closeDialog(); setTab("map"); setSelectedId(createdId) }
   }
 
+  async function duplicatePlan(code: string) {
+    if (!selectedPlan) return
+    let createdId = ""
+    const ok = await dialogAction(
+      async () => { createdId = (await api.duplicatePlan(selectedPlan.id, code)).id },
+      `Plan copiado como ${code}. Se creó en borrador con la misma estructura.`,
+    )
+    if (ok) { closeDialog(); setTab("map"); setSelectedId(createdId) }
+  }
+
   const actions: PlanActions | null = selectedPlan && {
     open: openDialog,
     deletePlan: () => confirmAction(
@@ -186,12 +257,19 @@ export function PlansPage() {
       if (!found) return
       void run(() => api.movePlanSubject(selectedPlan.id, subjectId, unit.id), `${found.subject.codigo} se movió al semestre ${unit.numero}.`)
     },
+    renumber: () => confirmAction(
+      "Renumerar semestres",
+      "Los semestres se numerarán 1, 2, 3… en el orden actual. Las materias y los prerrequisitos se conservan.",
+      "Renumerar",
+      () => api.renumberPlanUnits(selectedPlan.id),
+      "Semestres renumerados.",
+    ),
   }
 
   function renderDialog() {
     if (!dialog) return null
     const common = { busy, error: dialogError, onClose: closeDialog }
-    if (dialog.kind === "create-plan") return <CreatePlanDialog {...common} careers={careers} onSubmit={(data) => void createPlan(data)} />
+    if (dialog.kind === "create-plan") return <CreatePlanDialog {...common} careers={eligibleCareers} onSubmit={(data) => void createPlan(data)} />
     if (dialog.kind === "confirm") return <ConfirmDialog {...common} title={dialog.title} message={dialog.message} confirmLabel={dialog.confirmLabel} onConfirm={dialog.onConfirm} />
     if (!selectedPlan) return null
     const plan = selectedPlan
@@ -200,22 +278,31 @@ export function PlansPage() {
       case "edit-plan":
         return <EditPlanDialog {...common} plan={plan} onSubmit={(codigo) => void submitDialog(() => api.updatePlan(plan.id, { codigo }), "Código del plan actualizado.")} />
       case "plan-state":
-        return <PlanStateDialog {...common} plan={plan} onSubmit={(estado) => void submitDialog(() => api.updatePlan(plan.id, { estado }), `El plan ahora está ${STATE_LABEL[estado].toLowerCase()}.`)} />
+        return <PlanStateDialog {...common} plan={plan} onSubmit={(estado) => void submitDialog(
+          () => api.updatePlan(plan.id, { estado }),
+          estado === "VIGENTE"
+            ? (plan.estado === "INACTIVO" ? "El plan volvió a estar vigente." : "El plan quedó vigente y ya permite inscribir estudiantes.")
+            : "El plan quedó inactivo para nuevas inscripciones.",
+        )} />
+      case "duplicate-plan":
+        return <DuplicatePlanDialog {...common} plan={plan} onSubmit={(codigo) => void duplicatePlan(codigo)} />
       case "add-unit": {
-        const next = plan.unidades.reduce((max, unit) => Math.max(max, unit.numero), 0) + 1
-        return <UnitDialog {...common} mode="add" initialNumber={next} initialName="" onSubmit={({ numero, nombre }) => void submitDialog(() => api.createPlanUnit(plan.id, { numero, nombre }), `Semestre ${numero} agregado.`)} />
+        const next = nextUnitNumber(plan)
+        return <UnitDialog {...common} mode="add" initialNumber={next} initialName={`Semestre ${next}`} existingNumbers={plan.unidades.map((unit) => unit.numero)} onSubmit={({ numero, nombre }) => void submitDialog(() => api.createPlanUnit(plan.id, { numero, nombre }), `Semestre ${numero} agregado.`)} />
       }
+      case "generate-units":
+        return <GenerateUnitsDialog {...common} plan={plan} onSubmit={(data) => void submitDialog(() => api.generatePlanUnits(plan.id, data), `Se agregaron ${plural(data.cantidad, "semestre", "semestres")}.`)} />
       case "edit-unit": {
         const unit = dialog.unit
-        return <UnitDialog {...common} mode="edit" initialNumber={unit.numero} initialName={unit.nombre} onSubmit={({ nombre }) => void submitDialog(() => api.updatePlanUnit(plan.id, unit.id, { nombre }), `Semestre ${unit.numero} actualizado.`)} />
+        return <UnitDialog {...common} mode="edit" initialNumber={unit.numero} initialName={unit.nombre} existingNumbers={plan.unidades.map((candidate) => candidate.numero)} onSubmit={({ nombre }) => void submitDialog(() => api.updatePlanUnit(plan.id, unit.id, { nombre }), `Semestre ${unit.numero} actualizado.`)} />
       }
       case "add-subject": {
         const unit = dialog.unit
         const used = new Set(allSubjectsOf(plan).map((subject) => subject.materia_id))
-        const available = subjects.filter((subject) => !used.has(subject.id))
-        return <AddSubjectDialog {...common} unit={unit} available={available} onSubmit={(materiaId) => void submitDialog(
-          () => api.addPlanSubject(plan.id, { materia_id: materiaId, unidad_id: unit.id }),
-          `${subjects.find((subject) => subject.id === materiaId)?.codigo ?? "Materia"} agregada al semestre ${unit.numero}.`,
+        const available = subjects.filter((subject) => subject.activo && !used.has(subject.id))
+        return <AddSubjectsDialog {...common} unit={unit} available={available} onSubmit={(materiaIds) => void submitDialog(
+          () => api.addPlanSubjectsBulk(plan.id, { materia_ids: materiaIds, unidad_id: unit.id }),
+          `${plural(materiaIds.length, "materia agregada", "materias agregadas")} al semestre ${unit.numero}.`,
         )} />
       }
       case "manage-subject": {
@@ -267,12 +354,14 @@ export function PlansPage() {
       ) : (
         <PlanList
           plans={plans}
-          studentsWithoutPlan={students.filter((student) => !student.plan_estudio_id).length}
+          students={students}
           filterText={filterText}
           filterState={filterState}
+          filterCareer={filterCareer}
           headingRef={headingRef}
           onFilterText={setFilterText}
           onFilterState={setFilterState}
+          onFilterCareer={setFilterCareer}
           onCreate={() => openDialog({ kind: "create-plan" })}
           onOpen={openPlan}
         />
@@ -288,32 +377,57 @@ export function PlansPage() {
 
 interface PlanListProps {
   plans: StudyPlan[]
-  studentsWithoutPlan: number
+  students: StudentPlan[]
   filterText: string
   filterState: "" | PlanState
+  filterCareer: string
   headingRef: RefObject<HTMLHeadingElement | null>
   onFilterText: (value: string) => void
   onFilterState: (value: "" | PlanState) => void
+  onFilterCareer: (value: string) => void
   onCreate: () => void
   onOpen: (id: string) => void
 }
 
-function PlanList({ plans, studentsWithoutPlan, filterText, filterState, headingRef, onFilterText, onFilterState, onCreate, onOpen }: PlanListProps) {
+function PlanList({ plans, students, filterText, filterState, filterCareer, headingRef, onFilterText, onFilterState, onFilterCareer, onCreate, onOpen }: PlanListProps) {
   const query = filterText.trim().toLowerCase()
   const visible = plans.filter((plan) =>
     (!filterState || plan.estado === filterState) &&
+    (!filterCareer || plan.carrera_id === filterCareer) &&
     (!query || `${plan.codigo} ${plan.carrera_codigo} ${plan.carrera_nombre}`.toLowerCase().includes(query)))
-  const filtering = Boolean(query || filterState)
+  const filtering = Boolean(query || filterState || filterCareer)
+  const stateCounts = {
+    BORRADOR: plans.filter((plan) => plan.estado === "BORRADOR").length,
+    VIGENTE: plans.filter((plan) => plan.estado === "VIGENTE").length,
+    INACTIVO: plans.filter((plan) => plan.estado === "INACTIVO").length,
+  }
+  const studentsWithoutPlan = students.filter((student) => !student.plan_estudio_id).length
+  const assignedByPlan = new Map<string, number>()
+  for (const student of students) {
+    if (student.plan_estudio_id) assignedByPlan.set(student.plan_estudio_id, (assignedByPlan.get(student.plan_estudio_id) ?? 0) + 1)
+  }
+  const careerOptions = [...new Map(plans.map((plan) => [plan.carrera_id, { id: plan.carrera_id, codigo: plan.carrera_codigo, nombre: plan.carrera_nombre }])).values()]
+    .sort((a, b) => a.codigo.localeCompare(b.codigo, "es"))
 
   return (
     <>
       <PageHeader
         eyebrow="CURRÍCULO"
         title="Planes de estudio"
-        description="Un plan define los semestres, las materias y los prerrequisitos de una carrera. Solo un plan vigente permite inscribir estudiantes."
+        description="Un plan define los semestres, las materias y los prerrequisitos de una carrera. El sistema valida la estructura antes de publicarlo."
         headingRef={headingRef}
         actions={<button type="button" className="ui-btn ui-btn-primary" onClick={onCreate}><ButtonLabel icon="plus">Nuevo plan</ButtonLabel></button>}
       />
+
+      {plans.length > 0 && (
+        <div className="plan-summary" aria-label="Resumen de planes">
+          <span className="plan-summary-total"><strong>{plans.length}</strong> {plans.length === 1 ? "plan" : "planes"}</span>
+          <span className="plan-summary-chip" data-tone="amber">{stateCounts.BORRADOR} en borrador</span>
+          <span className="plan-summary-chip" data-tone="green">{stateCounts.VIGENTE} vigente(s)</span>
+          <span className="plan-summary-chip" data-tone="gray">{stateCounts.INACTIVO} inactivo(s)</span>
+          {studentsWithoutPlan > 0 && <span className="plan-summary-chip" data-tone="blue">{plural(studentsWithoutPlan, "estudiante sin plan", "estudiantes sin plan")}</span>}
+        </div>
+      )}
 
       {plans.length > 0 && studentsWithoutPlan > 0 && (
         <p className="ui-alert ui-alert-info">
@@ -322,7 +436,7 @@ function PlanList({ plans, studentsWithoutPlan, filterText, filterState, heading
         </p>
       )}
 
-      {plans.length > 6 && (
+      {plans.length > 0 && (
         <div className="plan-filters">
           <div className="ui-field">
             <label htmlFor="plan-search">Buscar por código o carrera</label>
@@ -335,20 +449,31 @@ function PlanList({ plans, studentsWithoutPlan, filterText, filterState, heading
               {(Object.keys(STATE_LABEL) as PlanState[]).map((state) => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}
             </select>
           </div>
+          <div className="ui-field">
+            <label htmlFor="plan-filter-career">Carrera</label>
+            <select id="plan-filter-career" className="ui-select" value={filterCareer} onChange={(event) => onFilterCareer(event.target.value)}>
+              <option value="">Todas</option>
+              {careerOptions.map((career) => <option key={career.id} value={career.id}>{career.codigo} — {career.nombre}</option>)}
+            </select>
+          </div>
         </div>
       )}
       {filtering && <p className="plan-count" role="status">Mostrando {visible.length} de {plans.length} planes.</p>}
 
       {plans.length === 0 ? (
-        <EmptyState icon="layers" title="Aún no hay planes de estudio">
-          Usa «Nuevo plan» para crear el primero. Se crea como borrador y puedes armarlo con calma antes de publicarlo.
-        </EmptyState>
+        <div>
+          <EmptyState icon="layers" title="Aún no hay planes de estudio">
+            Usa «Nuevo plan» para crear el primero. Se crea como borrador y puedes armarlo con calma antes de publicarlo.
+          </EmptyState>
+          <div className="plan-empty-actions"><button type="button" className="ui-btn ui-btn-primary" onClick={onCreate}><ButtonLabel icon="plus">Nuevo plan</ButtonLabel></button></div>
+        </div>
       ) : visible.length === 0 ? (
         <EmptyState icon="search" title="Ningún plan coincide con el filtro" />
       ) : (
         <ul className="plan-grid">
           {visible.map((plan) => {
             const stats = planStats(plan)
+            const readiness = planReadiness(plan)
             return (
               <li key={plan.id}>
                 <article className="plan-card" data-state={plan.estado}>
@@ -358,10 +483,12 @@ function PlanList({ plans, studentsWithoutPlan, filterText, filterState, heading
                   </div>
                   <h3>{plan.codigo}</h3>
                   <p className="plan-card-career">{plan.carrera_nombre} · {plan.carrera_codigo}</p>
+                  <p className={`plan-card-status plan-card-status--${readiness.tone}`}>{readiness.label}</p>
                   <dl className="plan-card-stats">
                     <div><dt>Semestres</dt><dd>{stats.semesters}</dd></div>
                     <div><dt>Materias</dt><dd>{stats.subjects}</dd></div>
                     <div><dt>Requisitos</dt><dd>{stats.prerequisites}</dd></div>
+                    <div><dt>Estudiantes</dt><dd>{assignedByPlan.get(plan.id) ?? 0}</dd></div>
                   </dl>
                   <button type="button" className="ui-btn ui-btn-secondary" aria-label={`Ver plan ${plan.codigo}`} onClick={() => onOpen(plan.id)}><ButtonLabel icon="arrow">Ver plan</ButtonLabel></button>
                 </article>
@@ -393,6 +520,7 @@ function PlanDetail({ plan, students, tab, headingRef, onTab, onBack, actions }:
   const stats = planStats(plan)
   const assigned = students.filter((student) => student.plan_estudio_id === plan.id)
   const counts: Record<TabId, number> = { map: stats.subjects, students: assigned.length }
+  const readiness = planReadiness(plan)
 
   return (
     <>
@@ -408,6 +536,7 @@ function PlanDetail({ plan, students, tab, headingRef, onTab, onBack, actions }:
           <StatusBadge tone={STATE_TONE[plan.estado]}>{STATE_LABEL[plan.estado]}</StatusBadge>
           <h1 ref={headingRef} tabIndex={-1} className="ui-heading-focus">Plan {plan.codigo}</h1>
           <p className="plan-hero-sub">{plan.carrera_nombre} · {plan.carrera_codigo} · Modalidad {MODALITY_LABEL[plan.modalidad].toLowerCase()}</p>
+          <p className={`plan-readiness plan-readiness--${readiness.tone}`}>{readiness.label}</p>
         </div>
         <dl className="plan-stats">
           <div><dt>Semestres</dt><dd>{stats.semesters}</dd></div>
@@ -418,6 +547,7 @@ function PlanDetail({ plan, students, tab, headingRef, onTab, onBack, actions }:
           {plan.estado === "BORRADOR" && <button type="button" className="ui-btn ui-btn-primary" onClick={() => actions.open({ kind: "plan-state" })}><ButtonLabel icon="check">{STATE_ACTION.BORRADOR}</ButtonLabel></button>}
           {plan.estado === "VIGENTE" && <button type="button" className="ui-btn ui-btn-warning" onClick={() => actions.open({ kind: "plan-state" })}><ButtonLabel icon="pause">{STATE_ACTION.VIGENTE}</ButtonLabel></button>}
           {plan.estado === "INACTIVO" && <button type="button" className="ui-btn ui-btn-success-outline" onClick={() => actions.open({ kind: "plan-state" })}><ButtonLabel icon="play">{STATE_ACTION.INACTIVO}</ButtonLabel></button>}
+          <button type="button" className="ui-btn ui-btn-secondary" onClick={() => actions.open({ kind: "duplicate-plan" })}><ButtonLabel icon="copy">Duplicar plan</ButtonLabel></button>
           {editable && <button type="button" className="ui-btn ui-btn-secondary" onClick={() => actions.open({ kind: "edit-plan" })}><ButtonLabel icon="edit">Editar código</ButtonLabel></button>}
           <button type="button" className="ui-btn ui-btn-danger-outline" onClick={actions.deletePlan}><ButtonLabel icon="trash">Eliminar plan</ButtonLabel></button>
         </div>
@@ -425,9 +555,11 @@ function PlanDetail({ plan, students, tab, headingRef, onTab, onBack, actions }:
 
       {!editable && (
         <p className="ui-alert ui-alert-warning" style={{ marginTop: 20, marginBottom: 0 }}>
-          La estructura de un plan solo se modifica mientras está en borrador. Para hacer cambios, crea un plan nuevo.
+          La estructura de un plan solo se modifica mientras está en borrador. Para hacer cambios, duplica el plan y publica una nueva versión.
         </p>
       )}
+
+      <PlanDiagnosticsPanel plan={plan} />
 
       <PlanTabs tab={tab} onTab={onTab} counts={counts} />
 
@@ -436,6 +568,33 @@ function PlanDetail({ plan, students, tab, headingRef, onTab, onBack, actions }:
         {tab === "students" && <StudentsPanel plan={plan} assigned={assigned} actions={actions} />}
       </div>
     </>
+  )
+}
+
+function PlanDiagnosticsPanel({ plan }: { plan: StudyPlan }) {
+  const errors = errorsOf(plan)
+  const warnings = warningsOf(plan)
+  if (plan.diagnosticos.length === 0) {
+    return <p className="ui-alert ui-alert-success" style={{ marginTop: 20 }}>Sin observaciones: la estructura del plan cumple las validaciones.</p>
+  }
+  return (
+    <section className="plan-diagnostics" aria-label="Validaciones del plan">
+      <div className="plan-diagnostics-head">
+        <h2>Validaciones del plan</h2>
+        <p>Los errores impiden publicar o reactivar el plan. Las advertencias no bloquean la publicación, pero conviene revisarlas.</p>
+      </div>
+      {errors.length > 0 && <DiagnosticGroup title={`${plural(errors.length, "error", "errores")} que impiden publicar`} tone="error" items={errors} />}
+      {warnings.length > 0 && <DiagnosticGroup title={`${plural(warnings.length, "advertencia", "advertencias")} por revisar`} tone="warning" items={warnings} />}
+    </section>
+  )
+}
+
+function DiagnosticGroup({ title, tone, items }: { title: string; tone: "error" | "warning"; items: PlanDiagnostic[] }) {
+  return (
+    <div className={`plan-diag plan-diag--${tone}`}>
+      <h3>{title}</h3>
+      <ul>{items.map((item, index) => <li key={`${item.codigo}-${item.materia_plan_id ?? item.unidad_id ?? index}`}>{item.mensaje}</li>)}</ul>
+    </div>
   )
 }
 
@@ -482,6 +641,7 @@ function PlanTabs({ tab, onTab, counts }: { tab: TabId; onTab: (tab: TabId) => v
 function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: boolean; actions: PlanActions }) {
   const units = sortedUnits(plan)
   const everySubject = allSubjectsOf(plan)
+  const issueIds = issueSubjectIds(plan)
   const [focusId, setFocusId] = useState("")
   const [dragging, setDragging] = useState<{ subjectId: string; fromUnitId: string } | null>(null)
   const [overId, setOverId] = useState("")
@@ -490,12 +650,24 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
   const requirements = new Set(focusSubject?.prerrequisitos ?? [])
   const dependents = new Set(focusId ? everySubject.filter((subject) => subject.prerrequisitos.includes(focusId)).map((subject) => subject.id) : [])
   const codeById = new Map(everySubject.map((subject) => [subject.id, subject.codigo]))
+  const semesterById = new Map<string, number>()
+  for (const unit of units) for (const subject of unit.materias) semesterById.set(subject.id, unit.numero)
+  const contiguous = numbersAreContiguous(plan)
 
   return (
     <>
       <div className="plan-toolbar">
-        <h2>Malla curricular</h2>
-        {editable && <button type="button" className="ui-btn ui-btn-primary" onClick={() => actions.open({ kind: "add-unit" })}><ButtonLabel icon="plus">Agregar semestre</ButtonLabel></button>}
+        <div>
+          <h2>Malla curricular</h2>
+          <p className="plan-toolbar-sub">Organiza la secuencia de materias por semestre y revisa los prerrequisitos.</p>
+        </div>
+        {editable && (
+          <div className="plan-toolbar-actions">
+            <button type="button" className="ui-btn ui-btn-secondary" onClick={() => actions.open({ kind: "generate-units" })}><ButtonLabel icon="layers">Generar semestres</ButtonLabel></button>
+            {!contiguous && units.length > 0 && <button type="button" className="ui-btn ui-btn-secondary" onClick={actions.renumber}><ButtonLabel icon="columns">Renumerar</ButtonLabel></button>}
+            <button type="button" className="ui-btn ui-btn-primary" onClick={() => actions.open({ kind: "add-unit" })}><ButtonLabel icon="plus">Agregar semestre</ButtonLabel></button>
+          </div>
+        )}
       </div>
       <p className="plan-lead">
         {editable
@@ -509,9 +681,17 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
       </ul>
 
       {units.length === 0 ? (
-        <EmptyState icon="layers" title="Este plan aún no tiene semestres">
-          {editable ? "Empieza con «Agregar semestre»; luego suma materias a cada columna." : "Este plan no tiene semestres registrados."}
-        </EmptyState>
+        <div>
+          <EmptyState icon="layers" title="Este plan aún no tiene semestres">
+            {editable ? "Empieza generando la secuencia de semestres o agrega uno por uno; luego suma materias a cada columna." : "Este plan no tiene semestres registrados."}
+          </EmptyState>
+          {editable && (
+            <div className="plan-empty-actions">
+              <button type="button" className="ui-btn ui-btn-primary" onClick={() => actions.open({ kind: "generate-units" })}><ButtonLabel icon="layers">Generar semestres</ButtonLabel></button>
+              <button type="button" className="ui-btn ui-btn-secondary" onClick={() => actions.open({ kind: "add-unit" })}><ButtonLabel icon="plus">Agregar uno</ButtonLabel></button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="kb-scroll" role="region" aria-label="Malla curricular por semestres. Desplázate horizontalmente para ver todos." tabIndex={0}>
           <ol className="kb-board">
@@ -558,8 +738,17 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
                   <ul className="kb-cards">
                     {unit.materias.map((subject) => {
                       const relation = requirements.has(subject.id) ? "req" : dependents.has(subject.id) ? "dep" : ""
-                      const classes = ["kb-card", relation && `kb-card--${relation}`, focusId === subject.id && "kb-card--focus"].filter(Boolean).join(" ")
+                      const classes = [
+                        "kb-card",
+                        relation && `kb-card--${relation}`,
+                        focusId === subject.id && "kb-card--focus",
+                        issueIds.has(subject.id) && "kb-card--issue",
+                        !subject.activo && "kb-card--inactive",
+                      ].filter(Boolean).join(" ")
                       const open = () => actions.open({ kind: "manage-subject", subjectId: subject.id })
+                      const requirementLabel = subject.prerrequisitos.length
+                        ? `Requiere: ${subject.prerrequisitos.map((id) => `${codeById.get(id) ?? "otra materia"} (S${semesterById.get(id) ?? "?"})`).join(", ")}`
+                        : "Sin prerrequisitos"
                       return (
                         <li key={subject.id}>
                           <div
@@ -568,7 +757,7 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
                             tabIndex={0}
                             draggable={editable}
                             data-dragging={dragging?.subjectId === subject.id ? "" : undefined}
-                            aria-label={`${editable ? "Gestionar" : "Ver detalle de"} ${subject.codigo} ${subject.nombre}`}
+                            aria-label={`${editable ? "Gestionar" : "Ver detalle de"} ${subject.codigo} ${subject.nombre}${subject.activo ? "" : ", materia inactiva"}`}
                             onClick={open}
                             onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open() } }}
                             onMouseEnter={() => setFocusId(subject.id)}
@@ -588,9 +777,11 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
                               {editable && <span className="kb-grip"><Icon name="grip" size={16} /></span>}
                             </span>
                             <span className="kb-name">{subject.nombre}</span>
-                            <span className="kb-req">
-                              {subject.prerrequisitos.length ? `Requiere: ${subject.prerrequisitos.map((id) => codeById.get(id) ?? "otra materia").join(", ")}` : "Sin prerrequisitos"}
+                            <span className="kb-flags">
+                              {!subject.activo && <span className="kb-flag kb-flag--error">Materia inactiva</span>}
+                              {issueIds.has(subject.id) && <span className="kb-flag kb-flag--warning">Revisar validación</span>}
                             </span>
+                            <span className="kb-req">{requirementLabel}</span>
                             {relation === "req" && focusSubject && <span className="kb-tag kb-tag--req">Requisito de {focusSubject.codigo}</span>}
                             {relation === "dep" && focusSubject && <span className="kb-tag kb-tag--dep">Requiere {focusSubject.codigo}</span>}
                           </div>
@@ -600,7 +791,7 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
                   </ul>
                 )}
 
-                {editable && <button type="button" className="kb-add" aria-label={`Agregar materia al semestre ${unit.numero}`} onClick={() => actions.open({ kind: "add-subject", unit })}><ButtonLabel icon="plus">Agregar materia</ButtonLabel></button>}
+                {editable && <button type="button" className="kb-add" aria-label={`Agregar materias al semestre ${unit.numero}`} onClick={() => actions.open({ kind: "add-subject", unit })}><ButtonLabel icon="plus">Agregar materias</ButtonLabel></button>}
               </li>
             ))}
           </ol>
@@ -611,14 +802,26 @@ function KanbanBoard({ plan, editable, actions }: { plan: StudyPlan; editable: b
 }
 
 function StudentsPanel({ plan, assigned, actions }: { plan: StudyPlan; assigned: StudentPlan[]; actions: PlanActions }) {
+  const assignable = plan.estado !== "INACTIVO" && plan.carrera_activa && plan.facultad_activa
+  const blockedReason = plan.estado === "INACTIVO"
+    ? "El plan está inactivo: no admite nuevas asignaciones."
+    : !plan.carrera_activa
+      ? "La carrera está inactiva: no admite nuevas asignaciones."
+      : !plan.facultad_activa
+        ? "La facultad está inactiva: no admite nuevas asignaciones."
+        : null
+
   return (
     <>
       <div className="plan-toolbar">
-        <h2>Estudiantes con este plan</h2>
-        <button type="button" className="ui-btn ui-btn-primary" onClick={() => actions.open({ kind: "assign-student" })}><ButtonLabel icon="plus">Asignar estudiante</ButtonLabel></button>
+        <div>
+          <h2>Estudiantes con este plan</h2>
+          <p className="plan-toolbar-sub">El plan de un estudiante puede corregirse mientras no tenga inscripciones ni notas.</p>
+        </div>
+        <button type="button" className="ui-btn ui-btn-primary" disabled={!assignable} title={blockedReason ?? undefined} onClick={() => actions.open({ kind: "assign-student" })}><ButtonLabel icon="plus">Asignar estudiante</ButtonLabel></button>
       </div>
-      <p className="plan-lead">El plan de un estudiante puede corregirse mientras no tenga inscripciones ni notas.</p>
-      {plan.estado !== "VIGENTE" && <p className="ui-alert ui-alert-warning">Este plan no está vigente: los estudiantes asignados no podrán inscribirse con él hasta que lo esté.</p>}
+      {blockedReason && <p className="ui-alert ui-alert-warning">{blockedReason}</p>}
+      {plan.estado === "BORRADOR" && <p className="ui-alert ui-alert-info">El plan está en borrador: puedes asignar estudiantes, pero la inscripción se habilitará cuando lo publiques.</p>}
 
       {assigned.length === 0 ? (
         <EmptyState icon="users" title="Ningún estudiante tiene asignado este plan">Usa «Asignar estudiante» para agregar al primero.</EmptyState>
@@ -652,7 +855,7 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
   if (careers.length === 0) {
     return (
       <Modal title="Nuevo plan de estudio" onClose={onClose}>
-        <p className="ui-alert ui-alert-warning ui-alert-flush">Primero registra una carrera: cada plan pertenece a una.</p>
+        <p className="ui-alert ui-alert-warning ui-alert-flush">No hay carreras activas con facultad activa. Primero registra o reactiva una carrera.</p>
         <div className="ui-modal-actions">
           <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} data-autofocus="">Cerrar</button>
           <a className="ui-btn ui-btn-primary" href="/admin/carreras">Ir a Carreras</a>
@@ -664,7 +867,7 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextErrors = {
-      carrera_id: careerId ? null : "Selecciona una carrera.",
+      carrera_id: careerId ? null : "Selecciona una carrera activa.",
       codigo: messageOf(codeSchema, code),
     }
     setErrors(nextErrors)
@@ -676,12 +879,12 @@ function CreatePlanDialog({ careers, busy, error, onClose, onSubmit }: DialogBas
     <Modal title="Nuevo plan de estudio" description="Se crea como borrador: podrás armar su malla antes de publicarlo. Todos los campos son obligatorios." onClose={onClose} locked={busy}>
       <form onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="plan-career" label="Carrera" error={errors.carrera_id}>
+        <Field id="plan-career" label="Carrera" hint="Solo se listan carreras activas cuya facultad también está activa." error={errors.carrera_id}>
           <select id="plan-career" className="ui-select" value={careerId} onChange={(event) => { setCareerId(event.target.value); setErrors((current) => ({ ...current, carrera_id: null })) }} required aria-invalid={Boolean(errors.carrera_id)} aria-describedby={errors.carrera_id ? "plan-career-error" : undefined} data-autofocus="">
-            {careers.map((career) => <option key={career.id} value={career.id}>{career.codigo} — {career.nombre}{career.activo ? "" : " (inactiva)"}</option>)}
+            {careers.map((career) => <option key={career.id} value={career.id}>{career.codigo} — {career.nombre} · {career.facultad_codigo}</option>)}
           </select>
         </Field>
-        <Field id="plan-code" label="Código del plan" hint="Ejemplo: SIS-2026. Se guarda en mayúsculas." error={errors.codigo}>
+        <Field id="plan-code" label="Código del plan" hint="Ejemplo: SIS-2026. Se guarda en mayúsculas y es único en todo el sistema." error={errors.codigo}>
           <input id="plan-code" className="ui-input" value={code} onChange={(event) => { setCode(event.target.value); setErrors((current) => ({ ...current, codigo: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.codigo)} aria-describedby={errors.codigo ? "plan-code-error plan-code-hint" : "plan-code-hint"} />
         </Field>
         <fieldset className="ui-fieldset">
@@ -716,20 +919,40 @@ function EditPlanDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & {
   )
 }
 
+function DuplicatePlanDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; onSubmit: (code: string) => void }) {
+  const [code, setCode] = useState(copyCode(plan.codigo))
+  const [codeError, setCodeError] = useState<string | null>(null)
+  return (
+    <Modal title={`Duplicar el plan ${plan.codigo}`} description="Se copiarán los semestres, las materias y los prerrequisitos. El nuevo plan quedará en borrador para que puedas ajustarlo antes de publicarlo." onClose={onClose} locked={busy}>
+      <form onSubmit={(event) => { event.preventDefault(); const invalid = messageOf(codeSchema, code); setCodeError(invalid); if (invalid) return; onSubmit(code.trim().toUpperCase()) }}>
+        <DialogError error={error} />
+        <p className="ui-alert ui-alert-info ui-alert-flush">El plan original no se modifica. Usa esta opción para crear una nueva versión de un plan ya publicado.</p>
+        <Field id="plan-copy-code" label="Código del nuevo plan" hint="Debe ser único en todo el sistema." error={codeError}>
+          <input id="plan-copy-code" className="ui-input" value={code} onChange={(event) => { setCode(event.target.value); setCodeError(null) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(codeError)} aria-describedby={codeError ? "plan-copy-code-error plan-copy-code-hint" : "plan-copy-code-hint"} data-autofocus="" />
+        </Field>
+        <FormActions busy={busy} onClose={onClose} submitLabel="Duplicar plan" icon="copy" />
+      </form>
+    </Modal>
+  )
+}
+
 function PlanStateDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; onSubmit: (state: PlanState) => void }) {
   const options = NEXT_STATES[plan.estado]
   // El botón que abre este diálogo ya dice qué se quiere hacer ("Publicar", "Desactivar", "Reactivar"): se preselecciona.
   const [state, setState] = useState<PlanState>(options[0])
+  const errors = errorsOf(plan)
+  const warnings = warningsOf(plan)
+  const blocked = state === "VIGENTE" && errors.length > 0
   const help: Record<PlanState, string> = {
     BORRADOR: "",
     VIGENTE: plan.estado === "BORRADOR"
       ? "Publica el plan para inscribir estudiantes. Después ya no podrás modificar su estructura ni volver a borrador."
-      : "Vuelve a habilitar el plan para inscribir estudiantes.",
+      : "Vuelve a habilitar el plan para inscribir estudiantes. Se validará que su estructura siga siendo publicable.",
     INACTIVO: "Deja de usarse para nuevas inscripciones. La estructura se conserva y sigue sin poder modificarse.",
   }
   return (
     <Modal title={STATE_ACTION[plan.estado]} description={`El plan ${plan.codigo} está ahora en estado «${STATE_LABEL[plan.estado]}».`} onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); onSubmit(state) }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (blocked) return; onSubmit(state) }}>
         <DialogError error={error} />
         <fieldset className="ui-fieldset">
           <legend>Nuevo estado</legend>
@@ -741,22 +964,46 @@ function PlanStateDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & 
             </label>
           ))}
         </fieldset>
-        <FormActions busy={busy} onClose={onClose} submitLabel="Confirmar cambio" icon="check" />
+        {state === "VIGENTE" && errors.length > 0 && (
+          <div className="plan-diag plan-diag--error" role="alert">
+            <h3>No se puede publicar todavía</h3>
+            <ul>{errors.map((item, index) => <li key={`${item.codigo}-${index}`}>{item.mensaje}</li>)}</ul>
+          </div>
+        )}
+        {state === "VIGENTE" && errors.length === 0 && warnings.length > 0 && (
+          <div className="plan-diag plan-diag--warning">
+            <h3>Advertencias que no bloquean la publicación</h3>
+            <ul>{warnings.map((item, index) => <li key={`${item.codigo}-${index}`}>{item.mensaje}</li>)}</ul>
+          </div>
+        )}
+        {blocked ? (
+          <div className="ui-modal-actions">
+            <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} disabled={busy} data-autofocus="">Cerrar</button>
+            <button type="button" className="ui-btn ui-btn-primary" disabled>Corrige los errores para continuar</button>
+          </div>
+        ) : (
+          <FormActions busy={busy} onClose={onClose} submitLabel="Confirmar cambio" icon="check" />
+        )}
       </form>
     </Modal>
   )
 }
 
-function UnitDialog({ mode, initialNumber, initialName, busy, error, onClose, onSubmit }: DialogBase & { mode: "add" | "edit"; initialNumber: number; initialName: string; onSubmit: (data: { numero: number; nombre: string }) => void }) {
+function UnitDialog({ mode, initialNumber, initialName, existingNumbers, busy, error, onClose, onSubmit }: DialogBase & { mode: "add" | "edit"; initialNumber: number; initialName: string; existingNumbers: number[]; onSubmit: (data: { numero: number; nombre: string }) => void }) {
   const [number, setNumber] = useState(String(initialNumber))
   const [name, setName] = useState(initialName)
   const [errors, setErrors] = useState<Record<string, string | null>>({})
+  const maxNumber = existingNumbers.reduce((max, value) => Math.max(max, value), 0)
+  const parsed = Number(number)
+  const duplicate = mode === "add" && existingNumbers.includes(parsed)
+  const createsGap = mode === "add" && Number.isInteger(parsed) && parsed > maxNumber + 1
+
   return (
-    <Modal title={mode === "add" ? "Agregar semestre" : `Editar semestre ${initialNumber}`} description={mode === "add" ? "Todos los campos son obligatorios." : "Solo se puede cambiar el nombre; el número identifica al semestre."} onClose={onClose} locked={busy}>
+    <Modal title={mode === "add" ? "Agregar semestre" : `Editar semestre ${initialNumber}`} description={mode === "add" ? "Los semestres deben numerarse 1, 2, 3… sin huecos para poder publicar el plan." : "Solo se puede cambiar el nombre; el número identifica al semestre."} onClose={onClose} locked={busy}>
       <form onSubmit={(event) => {
         event.preventDefault()
         const nextErrors = {
-          numero: mode === "add" ? messageOf(positiveIntSchema, Number(number)) : null,
+          numero: mode === "add" ? (duplicate ? "Ya existe un semestre con ese número." : messageOf(positiveIntSchema, Number(number))) : null,
           nombre: messageOf(labelSchema, name),
         }
         setErrors(nextErrors)
@@ -765,7 +1012,7 @@ function UnitDialog({ mode, initialNumber, initialName, busy, error, onClose, on
       }}>
         <DialogError error={error} />
         {mode === "add" && (
-          <Field id="unit-number" label="Número de semestre" hint="Ya se sugiere el siguiente disponible." error={errors.numero}>
+          <Field id="unit-number" label="Número de semestre" hint={createsGap ? "Quedará un hueco en la numeración. Podrás corregirlo con «Renumerar»." : "Ya se sugiere el siguiente número disponible."} error={errors.numero}>
             <input id="unit-number" className="ui-input" type="number" inputMode="numeric" min={1} value={number} onChange={(event) => { setNumber(event.target.value); setErrors((current) => ({ ...current, numero: null })) }} required aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? "unit-number-error unit-number-hint" : "unit-number-hint"} />
           </Field>
         )}
@@ -778,14 +1025,81 @@ function UnitDialog({ mode, initialNumber, initialName, busy, error, onClose, on
   )
 }
 
-function AddSubjectDialog({ unit, available, busy, error, onClose, onSubmit }: DialogBase & { unit: PlanUnit; available: Subject[]; onSubmit: (subjectId: string) => void }) {
-  const [subjectId, setSubjectId] = useState("")
+function GenerateUnitsDialog({ plan, busy, error, onClose, onSubmit }: DialogBase & { plan: StudyPlan; onSubmit: (data: { cantidad: number; nombre_base?: string }) => void }) {
+  const start = nextUnitNumber(plan)
+  const [count, setCount] = useState("2")
+  const [base, setBase] = useState("Semestre")
+  const [countError, setCountError] = useState<string | null>(null)
+  const parsed = Number(count)
+  const valid = Number.isInteger(parsed) && parsed > 0 && parsed <= 30
+  const end = start + (valid ? parsed : 1) - 1
+
+  return (
+    <Modal title="Generar semestres" description="Crea varios semestres consecutivos al final del plan. Después podrás cambiar sus nombres." onClose={onClose} locked={busy}>
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        const invalid = messageOf(positiveIntSchema, Number(count)) ?? (Number(count) > 30 ? "Puedes generar hasta 30 semestres a la vez." : null)
+        setCountError(invalid)
+        if (invalid) return
+        onSubmit({ cantidad: Number(count), nombre_base: base.trim() || undefined })
+      }}>
+        <DialogError error={error} />
+        <Field id="generate-count" label="Cantidad de semestres" hint={valid ? `Se crearán los semestres ${start} a ${end}.` : "Entre 1 y 30."} error={countError}>
+          <input id="generate-count" className="ui-input" type="number" inputMode="numeric" min={1} max={30} value={count} onChange={(event) => { setCount(event.target.value); setCountError(null) }} required aria-invalid={Boolean(countError)} aria-describedby={countError ? "generate-count-error generate-count-hint" : "generate-count-hint"} data-autofocus="" />
+        </Field>
+        <Field id="generate-base" label="Nombre base" hint="Se usará como «Nombre 1», «Nombre 2», etc. Si lo dejas vacío, se usará «Semestre».">
+          <input id="generate-base" className="ui-input" value={base} onChange={(event) => setBase(event.target.value)} maxLength={120} autoComplete="off" />
+        </Field>
+        <FormActions busy={busy} onClose={onClose} submitLabel="Generar semestres" icon="layers" />
+      </form>
+    </Modal>
+  )
+}
+
+function AddSubjectsDialog({ unit, available, busy, error, onClose, onSubmit }: DialogBase & { unit: PlanUnit; available: Subject[]; onSubmit: (subjectIds: string[]) => void }) {
+  const [query, setQuery] = useState("")
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [localError, setLocalError] = useState("")
-  const title = `Agregar materia al semestre ${unit.numero}`
+  const title = `Agregar materias al semestre ${unit.numero}`
+  const needle = query.trim().toLowerCase()
+  const visible = available.filter((subject) => !needle || `${subject.codigo} ${subject.nombre}`.toLowerCase().includes(needle))
+  const allVisibleSelected = visible.length > 0 && visible.every((subject) => selected.has(subject.id))
+  const selectedCount = selected.size
+
+  function toggle(subjectId: string) {
+    setLocalError("")
+    if (!selected.has(subjectId) && selected.size >= MAX_BULK_SUBJECTS) {
+      setLocalError(`Puedes agregar hasta ${MAX_BULK_SUBJECTS} materias a la vez.`)
+      return
+    }
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(subjectId)) next.delete(subjectId)
+      else next.add(subjectId)
+      return next
+    })
+  }
+
+  function toggleVisible() {
+    setLocalError("")
+    setSelected((current) => {
+      const next = new Set(current)
+      if (allVisibleSelected) {
+        for (const subject of visible) next.delete(subject.id)
+      } else {
+        for (const subject of visible) {
+          if (next.size >= MAX_BULK_SUBJECTS) break
+          next.add(subject.id)
+        }
+      }
+      return next
+    })
+  }
+
   if (available.length === 0) {
     return (
       <Modal title={title} onClose={onClose}>
-        <p className="ui-alert ui-alert-warning ui-alert-flush">No quedan materias del catálogo por agregar a este plan.</p>
+        <p className="ui-alert ui-alert-warning ui-alert-flush">No quedan materias activas del catálogo por agregar a este plan. Crea una materia nueva o reactiva una existente.</p>
         <div className="ui-modal-actions">
           <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} data-autofocus="">Cerrar</button>
           <a className="ui-btn ui-btn-primary" href="/admin/materias">Ir a Materias</a>
@@ -793,17 +1107,44 @@ function AddSubjectDialog({ unit, available, busy, error, onClose, onSubmit }: D
       </Modal>
     )
   }
+
   return (
-    <Modal title={title} description={`La materia se agregará a «${unit.nombre}». Podrás moverla después arrastrando su tarjeta.`} onClose={onClose} locked={busy}>
-      <form onSubmit={(event) => { event.preventDefault(); if (!subjectId) { setLocalError("Selecciona una materia."); return } setLocalError(""); onSubmit(subjectId) }}>
+    <Modal title={title} description={`Se agregarán a «${unit.nombre}». Puedes seleccionar varias materias y moverlas después arrastrando su tarjeta.`} onClose={onClose} locked={busy}>
+      <form onSubmit={(event) => { event.preventDefault(); if (selected.size === 0) { setLocalError("Selecciona al menos una materia."); return } setLocalError(""); onSubmit([...selected]) }}>
         <DialogError error={error || localError} />
-        <Field id="subject-pick" label="Materia del catálogo">
-          <select id="subject-pick" className="ui-select" value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setLocalError("") }} required aria-invalid={Boolean(localError)} data-autofocus="">
-            <option value="">Selecciona una materia</option>
-            {available.map((subject) => <option key={subject.id} value={subject.id}>{subject.codigo} — {subject.nombre}{subject.activo ? "" : " (inactiva)"}</option>)}
-          </select>
-        </Field>
-        <FormActions busy={busy} onClose={onClose} submitLabel="Agregar materia" icon="plus" />
+        <div className="subject-picker">
+          <div className="ui-field">
+            <label htmlFor="subject-search">Buscar materia</label>
+            <input id="subject-search" type="search" className="ui-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Código o nombre" autoComplete="off" data-autofocus="" />
+          </div>
+          <div className="subject-picker-actions">
+            <p className="subject-picker-count" role="status">{selectedCount} seleccionada(s) · {visible.length} disponible(s)</p>
+            <button type="button" className="ui-btn ui-btn-quiet" onClick={toggleVisible}>{allVisibleSelected ? "Quitar selección visible" : "Seleccionar visibles"}</button>
+          </div>
+          <ul className="subject-list" aria-label="Materias disponibles">
+            {visible.length === 0 ? <li className="subject-empty">Ninguna materia coincide con la búsqueda.</li> : visible.map((subject) => (
+              <li key={subject.id}>
+                <label className="subject-option">
+                  <input type="checkbox" checked={selected.has(subject.id)} onChange={() => toggle(subject.id)} />
+                  <span>
+                    <span className="subject-option-code">{subject.codigo}</span> {subject.nombre}
+                    <span className="subject-option-meta">
+                      {subject.planes_count === 0 ? "Aún no está en ningún plan" : `En ${plural(subject.planes_count, "plan", "planes")}`}
+                      {subject.carreras_count > 1 ? ` · compartida con ${subject.carreras_count} carreras` : ""}
+                    </span>
+                  </span>
+                  {subject.carreras_count > 1 && <span className="kb-flag kb-flag--muted">Compartida</span>}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="ui-modal-actions">
+          <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
+          <button type="submit" className="ui-btn ui-btn-primary" disabled={busy || selectedCount === 0}>
+            {busy ? "Agregando…" : <ButtonLabel icon="plus">{selectedCount === 0 ? "Agregar materias" : `Agregar ${plural(selectedCount, "materia", "materias")}`}</ButtonLabel>}
+          </button>
+        </div>
       </form>
     </Modal>
   )
@@ -826,11 +1167,14 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
   const [targetId, setTargetId] = useState("")
   const targets = sortedUnits(plan).filter((candidate) => candidate.id !== unit.id)
   const subjectById = new Map(allSubjectsOf(plan).map((candidate) => [candidate.id, candidate]))
+  const unitBySubjectId = new Map<string, PlanUnit>()
+  for (const candidateUnit of plan.unidades) for (const candidate of candidateUnit.materias) unitBySubjectId.set(candidate.id, candidateUnit)
   const candidates = prerequisiteCandidates(plan, subject)
+  const selectedCandidate = candidates.find((candidate) => candidate.id === requirementId)
   const dependents = allSubjectsOf(plan).filter((candidate) => candidate.prerrequisitos.includes(subject.id))
 
   return (
-    <Modal title={`${subject.codigo} — ${subject.nombre}`} description={`Semestre ${unit.numero} · ${unit.nombre}`} onClose={onClose} locked={busy}>
+    <Modal title={`${subject.codigo} — ${subject.nombre}`} description={`Semestre ${unit.numero} · ${unit.nombre}${subject.activo ? "" : " · Materia inactiva en el catálogo"}`} onClose={onClose} locked={busy}>
       <DialogError error={error} />
 
       <section className="mg-section" aria-labelledby="mg-req-title">
@@ -839,7 +1183,8 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
           <ul className="mg-chips" aria-label={`Prerrequisitos de ${subject.codigo}`}>
             {subject.prerrequisitos.map((id) => {
               const required = subjectById.get(id)
-              const label = required ? `${required.codigo} — ${required.nombre}` : "Otra materia"
+              const requiredUnit = unitBySubjectId.get(id)
+              const label = required ? `${required.codigo} — ${required.nombre}${requiredUnit ? ` · Semestre ${requiredUnit.numero}` : ""}` : "Otra materia"
               return (
                 <li key={id} className={editable ? "ui-chip" : "ui-chip ui-chip-static"}>
                   {label}
@@ -850,23 +1195,26 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
           </ul>
         )}
         {editable && candidates.length > 0 && (
-          <form className="mg-inline" onSubmit={(event) => { event.preventDefault(); void onAddPrerequisite(requirementId).then((ok) => { if (ok) setRequirementId("") }) }}>
-            <Field id="mg-req-pick" label="Agregar prerrequisito (debe aprobarla antes, con 51 o más)">
+          <form className="mg-inline" onSubmit={(event) => { event.preventDefault(); if (!requirementId) return; void onAddPrerequisite(requirementId).then((ok) => { if (ok) setRequirementId("") }) }}>
+            <Field id="mg-req-pick" label="Agregar prerrequisito (debe aprobarla antes, con 51 o más)" hint={selectedCandidate?.later ? "Esta materia está en un semestre posterior: quedará como advertencia, no bloquea la publicación." : undefined}>
               <select id="mg-req-pick" className="ui-select" value={requirementId} onChange={(event) => setRequirementId(event.target.value)} required data-autofocus="">
                 <option value="">Selecciona una materia</option>
-                {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
+                {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}{candidate.later ? " · semestre posterior" : ""}</option>)}
               </select>
             </Field>
-            <button type="submit" className="ui-btn ui-btn-primary" disabled={busy}><ButtonLabel icon="plus">Agregar</ButtonLabel></button>
+            <button type="submit" className="ui-btn ui-btn-primary" disabled={busy || !requirementId}><ButtonLabel icon="plus">Agregar</ButtonLabel></button>
           </form>
         )}
-        {editable && candidates.length === 0 && <p>No hay más materias en el plan que puedan ser prerrequisito.</p>}
+        {editable && candidates.length === 0 && <p>No hay materias disponibles que puedan ser prerrequisito sin crear un ciclo.</p>}
       </section>
 
       <section className="mg-section" aria-labelledby="mg-dep-title">
         <h3 id="mg-dep-title">Es prerrequisito de</h3>
         {dependents.length === 0 ? <p>Ninguna materia del plan la requiere.</p> : (
-          <ul className="mg-chips">{dependents.map((dependent) => <li key={dependent.id} className="ui-chip ui-chip-static">{dependent.codigo} — {dependent.nombre}</li>)}</ul>
+          <ul className="mg-chips">{dependents.map((dependent) => {
+            const dependentUnit = unitBySubjectId.get(dependent.id)
+            return <li key={dependent.id} className="ui-chip ui-chip-static">{dependent.codigo} — {dependent.nombre}{dependentUnit ? ` · Semestre ${dependentUnit.numero}` : ""}</li>
+          })}</ul>
         )}
       </section>
 
@@ -880,7 +1228,7 @@ function ManageSubjectDialog({ plan, subject, unit, editable, busy, error, onClo
                 {targets.map((target) => <option key={target.id} value={target.id}>Semestre {target.numero}: {target.nombre}</option>)}
               </select>
             </Field>
-            <button type="submit" className="ui-btn ui-btn-secondary" disabled={busy}>Mover</button>
+            <button type="submit" className="ui-btn ui-btn-secondary" disabled={busy || !targetId}>Mover</button>
           </form>
         </section>
       )}
@@ -924,6 +1272,22 @@ function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }:
     .filter((student) => student.plan_estudio_id !== plan.id)
     .sort((a, b) => Number(Boolean(a.plan_estudio_id)) - Number(Boolean(b.plan_estudio_id)) || a.apellidos.localeCompare(b.apellidos, "es"))
   const title = `Asignar estudiante al plan ${plan.codigo}`
+  const blockedReason = plan.estado === "INACTIVO"
+    ? "El plan está inactivo: no admite nuevas asignaciones."
+    : !plan.carrera_activa
+      ? "La carrera está inactiva: no admite nuevas asignaciones."
+      : !plan.facultad_activa
+        ? "La facultad está inactiva: no admite nuevas asignaciones."
+        : null
+
+  if (blockedReason) {
+    return (
+      <Modal title={title} onClose={onClose}>
+        <p className="ui-alert ui-alert-warning ui-alert-flush">{blockedReason}</p>
+        <div className="ui-modal-actions"><button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} data-autofocus="">Cerrar</button></div>
+      </Modal>
+    )
+  }
 
   if (candidates.length === 0) {
     return (
@@ -944,6 +1308,7 @@ function AssignStudentDialog({ plan, students, busy, error, onClose, onSubmit }:
         onSubmit(student, openingId || undefined)
       }}>
         <DialogError error={error || openingsError || localError} />
+        {plan.estado === "BORRADOR" && <p className="ui-alert ui-alert-info ui-alert-flush">El plan está en borrador. Podrás asignarlo, pero la inscripción se habilitará al publicarlo.</p>}
         <Field id="student-pick" label="Estudiante">
           <select id="student-pick" className="ui-select" value={studentId} onChange={(event) => { setStudentId(event.target.value); setLocalError("") }} required aria-invalid={Boolean(localError)} data-autofocus="">
             <option value="">Selecciona un estudiante</option>

@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.validation import Code, PositiveInt, StrictFlag, descriptive_text
 from app.modules.curriculum.models.entities import EstadoPlan, ModalidadPlan
@@ -43,7 +44,12 @@ class CareerPublic(BaseModel):
     facultad_id: uuid.UUID
     facultad_codigo: str
     facultad_nombre: str
+    facultad_activa: bool = True
     activo: bool
+    planes_count: int = 0
+    planes_vigentes_count: int = 0
+    materias_count: int = 0
+    estudiantes_count: int = 0
 
 
 class FacultyCreate(StrictInputModel):
@@ -71,6 +77,10 @@ class FacultyPublic(BaseModel):
     codigo: str
     nombre: str
     activo: bool
+    carreras_count: int = 0
+    carreras_activas_count: int = 0
+    planes_count: int = 0
+    planes_vigentes_count: int = 0
 
 
 class SubjectCreate(StrictInputModel):
@@ -98,12 +108,17 @@ class SubjectPublic(BaseModel):
     codigo: str
     nombre: str
     activo: bool
+    planes_count: int = 0
+    planes_vigentes_count: int = 0
+    carreras_count: int = 0
+    ofertas_count: int = 0
 
 
 class PlanCreate(StrictInputModel):
     carrera_id: uuid.UUID
     codigo: CodeText
     modalidad: ModalidadPlan
+    semestres_iniciales: Annotated[StrictInt, Field(ge=0, le=30)] = 0
 
 
 class PlanUpdate(StrictInputModel):
@@ -118,21 +133,35 @@ class PlanUpdate(StrictInputModel):
         return self
 
 
+class PlanDuplicate(StrictInputModel):
+    codigo: CodeText
+
+
+class PlanUnitsGenerate(StrictInputModel):
+    cantidad: Annotated[StrictInt, Field(gt=0, le=30)]
+    nombre_base: ShortText | None = None
+
+
+class PlanSubjectsBulkCreate(StrictInputModel):
+    materia_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    unidad_id: uuid.UUID
+
+
+class PlanDiagnostic(BaseModel):
+    tipo: Literal["error", "warning"]
+    codigo: str
+    mensaje: str
+    unidad_id: uuid.UUID | None = None
+    materia_plan_id: uuid.UUID | None = None
+
+
 class UnitCreate(StrictInputModel):
     numero: PositiveInt
     nombre: ShortText
 
 
 class UnitUpdate(StrictInputModel):
-    numero: PositiveInt | None = None
-    nombre: ShortText | None = None
-
-    @model_validator(mode="after")
-    def require_updates(self):
-        values = self.model_dump(exclude_unset=True)
-        if not values or any(value is None for value in values.values()):
-            raise ValueError("Envía al menos un campo y ninguno puede ser null")
-        return self
+    nombre: ShortText
 
 
 class UnitPublic(BaseModel):
@@ -162,6 +191,7 @@ class PlanSubjectPublic(BaseModel):
     materia_id: uuid.UUID
     codigo: str
     nombre: str
+    activo: bool
     prerrequisitos: list[uuid.UUID]
 
 
@@ -174,9 +204,15 @@ class PlanPublic(BaseModel):
     carrera_id: uuid.UUID
     carrera_codigo: str
     carrera_nombre: str
+    carrera_activa: bool
+    facultad_activa: bool
     codigo: str
     modalidad: ModalidadPlan
     estado: EstadoPlan
+    total_semestres: int
+    total_materias: int
+    puede_publicarse: bool
+    diagnosticos: list[PlanDiagnostic]
     unidades: list[UnitWithSubjects]
 
 

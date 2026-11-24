@@ -388,3 +388,15 @@ uv run ruff check app migrations
   regresión. Pasaron 28 pruebas backend, Ruff, formato y compilación
   TypeScript/Vite. Los cambios siguen sin commit; el stash previo a la
   integración se conserva como respaldo.
+- **Currículo — integridad y usabilidad (24-11-2026):** se reforzó la
+  publicación de planes (estructura con semestres 1..N y materias, sin vacíos,
+  carrera/facultad/materias activas), se bloquearon inconsistencias de
+  carreras/facultades y la inactivación de materias usadas por planes VIGENTES,
+  y se restringió la asignación a planes INACTIVOS. Se agregaron diagnósticos
+  tipados, duplicación de planes con prerrequisitos, generación y renumeración
+  de semestres, carga masiva de materias, conteos de uso y filtros en catálogos.
+  Migración `0011_curriculum_integrity` creada (índice `materias_plan.materia_id`)
+  pero **no aplicada** a la base principal. Verificación: 34 pruebas backend en
+  SQLite, Ruff sobre `app`/`migrations` y build TypeScript/Vite aprobados. Falta
+  revisión visual autenticada, pruebas de concurrencia y aplicar la migración
+  con autorización explícita. Los cambios permanecen sin commit.

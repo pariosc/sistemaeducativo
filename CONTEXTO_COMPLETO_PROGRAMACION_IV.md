@@ -198,11 +198,11 @@ Se registran con código único y nombre. Pueden consultarse, editarse, inactiva
 
 #### RN05 Materias
 
-Se registran activas, con código único y nombre. Se permite editar, inactivar y reactivar sin destruir historial. Solo se eliminan si no pertenecen a planes ni tienen ofertas o cursos vinculados.
+Se registran activas, con código único y nombre. Se permite editar, inactivar y reactivar sin destruir historial. Solo se eliminan si no pertenecen a planes ni tienen ofertas o cursos vinculados. Una materia incorporada a un plan VIGENTE no puede inactivarse mientras ese plan conserve ese estado: primero se desactiva el plan o se prepara una nueva versión sin ella.
 
 #### RN06 Planes y semestres
 
-Cada plan pertenece a una carrera, tiene un código único en todo el sistema y utiliza modalidad MODULAR o SEMESTRAL. Todos los planes se organizan por semestres. La modalidad SEMESTRAL cursa en conjunto las materias del semestre; la modalidad MODULAR las distribuye en bloques mensuales, pero conserva su pertenencia al semestre del plan. La ubicación semestral organiza el currículo, pero no bloquea por sí sola la inscripción: el estudiante puede retomar materias pendientes o adelantar materias de semestres posteriores si hay una oferta habilitada y cumple sus prerrequisitos y demás condiciones. Los estados son BORRADOR, VIGENTE e INACTIVO. Solo BORRADOR admite edición estructural; al pasar a VIGENTE la estructura queda bloqueada y cualquier cambio requiere crear otro plan. VIGENTE se utiliza para nuevas ofertas e INACTIVO conserva historial y no se oferta.
+Cada plan pertenece a una carrera, tiene un código único en todo el sistema y utiliza modalidad MODULAR o SEMESTRAL. Todos los planes se organizan por semestres. La modalidad SEMESTRAL cursa en conjunto las materias del semestre; la modalidad MODULAR las distribuye en bloques mensuales, pero conserva su pertenencia al semestre del plan. La ubicación semestral organiza el currículo, pero no bloquea por sí sola la inscripción: el estudiante puede retomar materias pendientes o adelantar materias de semestres posteriores si hay una oferta habilitada y cumple sus prerrequisitos y demás condiciones. Los estados son BORRADOR, VIGENTE e INACTIVO. Solo BORRADOR admite edición estructural; al pasar a VIGENTE la estructura queda bloqueada y cualquier cambio requiere crear otro plan. VIGENTE se utiliza para nuevas ofertas e INACTIVO conserva historial y no se oferta. Para publicar o reactivar un plan se exige al menos un semestre con materias, numeración consecutiva desde 1, ningún semestre vacío y carrera, facultad y materias activas; un prerrequisito del mismo semestre o de uno posterior se informa como advertencia, no impide publicar. La copia de un plan conserva semestres, materias y prerrequisitos y nace en BORRADOR.
 
 #### RN07 Materias del plan y prerrequisitos
 
@@ -210,7 +210,7 @@ Una materia no se duplica dentro del mismo plan. Cada materia se asigna a un sem
 
 #### RN08 Asignación del plan
 
-El administrador asigna al estudiante un plan de la carrera que cursará. Ese plan determina su oferta y las condiciones académicas de inscripción. El modelo permite que el estudiante aún no tenga plan; esa situación impide inscribirse. La asignación puede corregirse mientras el estudiante no tenga inscripciones ni notas; una vez que existe historial académico, el plan no puede cambiarse.
+El administrador asigna al estudiante un plan de la carrera que cursará. Ese plan determina su oferta y las condiciones académicas de inscripción. El modelo permite que el estudiante aún no tenga plan; esa situación impide inscribirse. La asignación puede corregirse mientras el estudiante no tenga inscripciones ni notas; una vez que existe historial académico, el plan no puede cambiarse. Se admite asignar un plan BORRADOR o VIGENTE cuya carrera y facultad estén activas; un plan INACTIVO no admite nuevas asignaciones.
 
 #### RN09 Periodos y paralelos
 
@@ -1078,7 +1078,7 @@ Acciones y botones previstos: Nueva facultad; editar; inactivar/reactivar; elimi
 
 Campos principales: Facultad: código, nombre y activo. Carrera: código, nombre, facultad, activo y referencias a planes para informar dependencias.
 
-Validaciones: Códigos únicos en cada catálogo y nombre obligatorio; cada carrera pertenece a una facultad; no eliminar facultades con carreras ni carreras con planes; conservar historial al inactivar.
+Validaciones: Códigos únicos en cada catálogo y nombre obligatorio; cada carrera pertenece a una facultad; no eliminar facultades con carreras ni carreras con planes; conservar historial al inactivar. Una carrera no se mueve a una facultad inactiva ni se reactiva mientras su facultad esté inactiva; al editar otros datos puede conservar la facultad inactiva actual.
 
 RF relacionados: RF11
 
@@ -1096,7 +1096,7 @@ Acciones y botones previstos: Crear; editar permitido; cambiar estado; gestionar
 
 Campos principales: Carrera, código de plan, modalidad, estado, número/nombre de semestre, materias del plan y prerrequisitos.
 
-Validaciones: Materias asignadas a semestres del plan en ambas modalidades, materia no duplicada, prerrequisitos del mismo plan sin ciclos, restricciones por uso y eliminación sin dependencias. La regla temporal de avance modular requiere definición.
+Validaciones: Materias asignadas a semestres del plan en ambas modalidades, materia no duplicada, prerrequisitos del mismo plan sin ciclos, restricciones por uso y eliminación sin dependencias. La regla temporal de avance modular requiere definición. Para publicar o reactivar se exige al menos un semestre con materias, numeración 1..N sin huecos ni semestres vacíos y carrera, facultad y materias activas. Los prerrequisitos del mismo semestre o posteriores generan advertencia, no bloqueo, porque el semestre curricular no limita el avance. La duplicación copia la estructura y los prerrequisitos en un plan BORRADOR; la generación y renumeración de semestres facilitan mantener la secuencia.
 
 RF relacionados: RF12, RF16, RF17
 
@@ -1114,7 +1114,7 @@ Acciones y botones previstos: Nueva materia; editar; activar/inactivar; eliminar
 
 Campos principales: Código, nombre, activo y dependencias académicas informativas.
 
-Validaciones: Código único; eliminación solo sin planes ni ofertas/cursos; preservar historial.
+Validaciones: Código único; eliminación solo sin planes ni ofertas/cursos; preservar historial. Una materia incorporada a un plan VIGENTE no se inactiva mientras ese plan siga vigente.
 
 RF relacionados: RF13, RF14, RF15
 
@@ -1553,6 +1553,7 @@ Tabla 46. 14.7 Observaciones y cambios de versión
 | Terminología | Grupo se sustituye por Paralelo en interfaz. Curso sigue intacto en el dominio. |
 | Administradores | Principal es privilegio especial de ADMINISTRADOR; creación inicial única, gestión exclusiva de otras cuentas administrativas y protección frente a inactivación ordinaria. |
 | Currículo | Se amplía gestión de carreras, estados de materias y estados BORRADOR/VIGENTE/INACTIVO de planes, con eliminación condicionada. |
+| Integridad del currículo | Cambio confirmado e implementado: publicar o reactivar un plan exige estructura completa (semestres 1..N con materias), carrera/facultad/materias activas y sin semestres vacíos. Los prerrequisitos del mismo semestre o posteriores solo advierten. Una materia de un plan VIGENTE no se inactiva. Se puede asignar un plan BORRADOR o VIGENTE con carrera y facultad activas; un plan INACTIVO no admite asignaciones. La copia de planes y las herramientas de semestres y materias masivas preservan la estructura sin alterar el plan original. |
 | Facultad | Ajuste funcional confirmado después de v8: se incorpora el catálogo de facultades y cada carrera pertenece a exactamente una. Una facultad no se elimina mientras tenga carreras; RF11 y HU08 se amplían sin crear códigos nuevos. |
 | Inscripciones | Se añaden cupos y habilitación estudiante/periodo; apertura del paralelo no sustituye habilitación. |
 | Notas | Se confirma nota final entera 0–100 y aprobación desde 51; cierre y correcciones posteriores permanecen abiertos. |

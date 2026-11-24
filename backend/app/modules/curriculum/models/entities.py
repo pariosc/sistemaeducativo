@@ -77,6 +77,10 @@ class Carrera(Base):
     def facultad_nombre(self) -> str:
         return self.facultad.nombre
 
+    @property
+    def facultad_activa(self) -> bool:
+        return self.facultad.activo
+
 
 class Materia(Base):
     __tablename__ = "materias"
@@ -171,7 +175,10 @@ class MateriaPlan(Base):
     )
     unidad_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     materia_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("materias.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True),
+        ForeignKey("materias.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     plan: Mapped[PlanEstudio] = relationship(back_populates="materias_plan", overlaps="unidad")
     unidad: Mapped[UnidadPlan] = relationship(

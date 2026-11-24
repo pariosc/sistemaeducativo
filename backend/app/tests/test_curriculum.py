@@ -329,3 +329,393 @@ async def test_student_plan_assignment_and_listing(client, origin_headers):
         row["usuario_id"] == student_id and row["plan_codigo"] == plan["codigo"]
         for row in listed.json()
     )
+
+
+def unit_by_number(plan, number):
+    return next(unit for unit in plan["unidades"] if unit["numero"] == number)
+
+
+async def add_subject(client, plan_id, unit_id, subject_id, origin_headers):
+    response = await client.post(
+        f"/api/v1/admin/plans/{plan_id}/subjects",
+        json={"materia_id": subject_id, "unidad_id": unit_id},
+        headers=origin_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_faculty_and_career_inactivation_respect_dependencies(client, origin_headers):
+    await sign_in(client)
+    faculty = (
+        await client.post(
+            "/api/v1/admin/faculties",
+            json={"codigo": "ING", "nombre": "Ingeniería"},
+            headers=origin_headers,
+        )
+    ).json()
+    career = (
+        await client.post(
+            "/api/v1/admin/careers",
+            json={"codigo": "SIS", "nombre": "Sistemas", "facultad_id": faculty["id"]},
+            headers=origin_headers,
+        )
+    ).json()
+
+    blocked_faculty = await client.patch(
+        f"/api/v1/admin/faculties/{faculty['id']}",
+        json={"activo": False},
+        headers=origin_headers,
+    )
+    assert blocked_faculty.status_code == 409
+
+    deactivated_career = await client.patch(
+        f"/api/v1/admin/careers/{career['id']}",
+        json={"activo": False},
+        headers=origin_headers,
+    )
+    assert deactivated_career.status_code == 200
+    blocked_career_plan = await client.post(
+        "/api/v1/admin/plans",
+        json={"carrera_id": career["id"], "codigo": "SIS-2027", "modalidad": "SEMESTRAL"},
+        headers=origin_headers,
+    )
+    assert blocked_career_plan.status_code == 409
+
+    deactivated_faculty = await client.patch(
+        f"/api/v1/admin/faculties/{faculty['id']}",
+        json={"activo": False},
+        headers=origin_headers,
+    )
+    assert deactivated_faculty.status_code == 200
+    blocked_new_career = await client.post(
+        "/api/v1/admin/careers",
+        json={"codigo": "ADM", "nombre": "Administración", "facultad_id": faculty["id"]},
+        headers=origin_headers,
+    )
+    assert blocked_new_career.status_code == 409
+
+
+async def test_career_update_allows_keeping_inactive_faculty(client, origin_headers):
+    await sign_in(client)
+    source = (
+        await client.post(
+            "/api/v1/admin/faculties",
+            json={"codigo": "F01", "nombre": "Facultad origen"},
+            headers=origin_headers,
+        )
+    ).json()
+    target = (
+        await client.post(
+            "/api/v1/admin/faculties",
+            json={"codigo": "F02", "nombre": "Facultad destino"},
+            headers=origin_headers,
+        )
+    ).json()
+    career = (
+        await client.post(
+            "/api/v1/admin/careers",
+            json={"codigo": "CAR", "nombre": "Carrera", "facultad_id": source["id"]},
+            headers=origin_headers,
+        )
+    ).json()
+    assert (
+        await client.patch(
+            f"/api/v1/admin/careers/{career['id']}",
+            json={"activo": False},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    assert (
+        await client.patch(
+            f"/api/v1/admin/faculties/{source['id']}",
+            json={"activo": False},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+
+    renamed = await client.patch(
+        f"/api/v1/admin/careers/{career['id']}",
+        json={"nombre": "Carrera renombrada", "facultad_id": source["id"]},
+        headers=origin_headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+    blocked_reactivation = await client.patch(
+        f"/api/v1/admin/careers/{career['id']}",
+        json={"activo": True},
+        headers=origin_headers,
+    )
+    assert blocked_reactivation.status_code == 409
+    moved = await client.patch(
+        f"/api/v1/admin/careers/{career['id']}",
+        json={"activo": True, "facultad_id": target["id"]},
+        headers=origin_headers,
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["facultad_id"] == target["id"]
+
+
+async def test_plan_publication_requires_structure_and_contiguous_semesters(
+    client, origin_headers
+):
+    await sign_in(client)
+    career = await create_career(client)
+    plan = await create_plan(client, career["id"], "PLAN-ESTRUCTURA")
+
+    empty = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}",
+        json={"estado": "VIGENTE"},
+        headers=origin_headers,
+    )
+    assert empty.status_code == 409
+    assert "semestres" in empty.json()["detail"]
+
+    first = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/units",
+        json={"numero": 1, "nombre": "Primer semestre"},
+        headers=origin_headers,
+    )
+    third = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/units",
+        json={"numero": 3, "nombre": "Tercer semestre"},
+        headers=origin_headers,
+    )
+    assert first.status_code == third.status_code == 201
+    subject = (
+        await client.post(
+            "/api/v1/admin/subjects",
+            json={"codigo": "EST1", "nombre": "Materia de estructura"},
+            headers=origin_headers,
+        )
+    ).json()
+    plan_data = await add_subject(
+        client, plan["id"], first.json()["id"], subject["id"], origin_headers
+    )
+    assert plan_data["total_semestres"] == 2
+    assert plan_data["total_materias"] == 1
+    assert plan_data["puede_publicarse"] is False
+    assert any(item["codigo"] == "semestres_no_consecutivos" for item in plan_data["diagnosticos"])
+
+    blocked = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}",
+        json={"estado": "VIGENTE"},
+        headers=origin_headers,
+    )
+    assert blocked.status_code == 409
+    assert "1, 2, 3" in blocked.json()["detail"]
+
+    renumbered = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/units/renumber",
+        headers=origin_headers,
+    )
+    assert renumbered.status_code == 200
+    assert [unit["numero"] for unit in renumbered.json()["unidades"]] == [1, 2]
+    assert renumbered.json()["puede_publicarse"] is False
+    assert any(
+        item["codigo"] == "semestre_vacio" for item in renumbered.json()["diagnosticos"]
+    )
+    empty_semester = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}",
+        json={"estado": "VIGENTE"},
+        headers=origin_headers,
+    )
+    assert empty_semester.status_code == 409
+    assert "vacío" in empty_semester.json()["detail"] or "sin materias" in empty_semester.json()["detail"]
+
+    second_subject = (
+        await client.post(
+            "/api/v1/admin/subjects",
+            json={"codigo": "EST2", "nombre": "Materia del segundo semestre"},
+            headers=origin_headers,
+        )
+    ).json()
+    completed = await add_subject(
+        client,
+        plan["id"],
+        unit_by_number(renumbered.json(), 2)["id"],
+        second_subject["id"],
+        origin_headers,
+    )
+    assert completed["puede_publicarse"] is True
+    published = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}",
+        json={"estado": "VIGENTE"},
+        headers=origin_headers,
+    )
+    assert published.status_code == 200, published.text
+
+
+async def test_plan_generation_duplication_and_bulk_subjects(client, origin_headers):
+    await sign_in(client)
+    career = await create_career(client)
+    plan = await create_plan(client, career["id"], "PLAN-BASE")
+    generated = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/units/generate",
+        json={"cantidad": 2, "nombre_base": "Semestre"},
+        headers=origin_headers,
+    )
+    assert generated.status_code == 200
+    assert [unit["numero"] for unit in generated.json()["unidades"]] == [1, 2]
+    first_unit = unit_by_number(generated.json(), 1)
+
+    subjects = []
+    for code in ("BUL1", "BUL2", "BUL3"):
+        response = await client.post(
+            "/api/v1/admin/subjects",
+            json={"codigo": code, "nombre": f"Materia {code}"},
+            headers=origin_headers,
+        )
+        assert response.status_code == 201
+        subjects.append(response.json())
+
+    bulk = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects/bulk",
+        json={"materia_ids": [subjects[0]["id"], subjects[1]["id"]], "unidad_id": first_unit["id"]},
+        headers=origin_headers,
+    )
+    assert bulk.status_code == 201, bulk.text
+    assert bulk.json()["total_materias"] == 2
+    repeated = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects/bulk",
+        json={"materia_ids": [subjects[1]["id"], subjects[2]["id"]], "unidad_id": first_unit["id"]},
+        headers=origin_headers,
+    )
+    assert repeated.status_code == 409
+    assert "BUL2" in repeated.json()["detail"]
+
+    assert (
+        await client.patch(
+            f"/api/v1/admin/subjects/{subjects[2]['id']}",
+            json={"activo": False},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    inactive = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects/bulk",
+        json={"materia_ids": [subjects[2]["id"]], "unidad_id": first_unit["id"]},
+        headers=origin_headers,
+    )
+    assert inactive.status_code == 409
+    assert "BUL3" in inactive.json()["detail"]
+
+    entries = unit_by_number(bulk.json(), 1)["materias"]
+    requirement = next(entry for entry in entries if entry["codigo"] == "BUL1")
+    dependent = next(entry for entry in entries if entry["codigo"] == "BUL2")
+    prerequisite = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects/{dependent['id']}/prerequisites",
+        json={"requisito_materia_plan_id": requirement["id"]},
+        headers=origin_headers,
+    )
+    assert prerequisite.status_code == 201
+
+    duplicate = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/duplicate",
+        json={"codigo": "PLAN-COPIA"},
+        headers=origin_headers,
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    clone = duplicate.json()
+    assert clone["estado"] == "BORRADOR"
+    assert clone["total_semestres"] == 2
+    assert clone["total_materias"] == 2
+    copied_entries = unit_by_number(clone, 1)["materias"]
+    copied_dependent = next(entry for entry in copied_entries if entry["codigo"] == "BUL2")
+    copied_requirement = next(entry for entry in copied_entries if entry["codigo"] == "BUL1")
+    assert copied_dependent["prerrequisitos"] == [copied_requirement["id"]]
+    repeated_clone = await client.post(
+        f"/api/v1/admin/plans/{plan['id']}/duplicate",
+        json={"codigo": "PLAN-COPIA"},
+        headers=origin_headers,
+    )
+    assert repeated_clone.status_code == 409
+
+
+async def test_subject_inactivation_is_blocked_by_vigente_plan(client, origin_headers):
+    await sign_in(client)
+    career = await create_career(client)
+    plan = await create_plan(client, career["id"], "PLAN-VIGENTE")
+    unit = (
+        await client.post(
+            f"/api/v1/admin/plans/{plan['id']}/units",
+            json={"numero": 1, "nombre": "Semestre 1"},
+            headers=origin_headers,
+        )
+    ).json()
+    subject = (
+        await client.post(
+            "/api/v1/admin/subjects",
+            json={"codigo": "ACT1", "nombre": "Materia activa"},
+            headers=origin_headers,
+        )
+    ).json()
+    plan_data = await add_subject(client, plan["id"], unit["id"], subject["id"], origin_headers)
+    assert plan_data["puede_publicarse"] is True
+    assert (
+        await client.patch(
+            f"/api/v1/admin/plans/{plan['id']}",
+            json={"estado": "VIGENTE"},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+
+    blocked = await client.patch(
+        f"/api/v1/admin/subjects/{subject['id']}",
+        json={"activo": False},
+        headers=origin_headers,
+    )
+    assert blocked.status_code == 409
+    assert "vigente" in blocked.json()["detail"]
+    listed = (await client.get("/api/v1/admin/subjects")).json()
+    assert next(row for row in listed if row["id"] == subject["id"])[
+        "planes_vigentes_count"
+    ] == 1
+
+    assert (
+        await client.patch(
+            f"/api/v1/admin/plans/{plan['id']}",
+            json={"estado": "INACTIVO"},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    deactivated = await client.patch(
+        f"/api/v1/admin/subjects/{subject['id']}",
+        json={"activo": False},
+        headers=origin_headers,
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["planes_vigentes_count"] == 0
+
+
+async def test_plan_assignment_rejects_inactive_plan(client, origin_headers):
+    await sign_in(client)
+    career = await create_career(client)
+    plan = await create_plan(client, career["id"], "PLAN-INACTIVO")
+    student = (
+        await client.post(
+            "/api/v1/admin/users",
+            json={
+                "ci": "5566778",
+                "nombres": "Estudiante",
+                "apellidos": "Inactivo",
+                "correo": "inactive.plan@example.edu",
+                "telefono": "70000009",
+                "rol": "ESTUDIANTE",
+            },
+            headers=origin_headers,
+        )
+    ).json()
+    assert (
+        await client.patch(
+            f"/api/v1/admin/plans/{plan['id']}",
+            json={"estado": "INACTIVO"},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    assigned = await client.put(
+        f"/api/v1/admin/students/{student['id']}/plan",
+        json={"plan_estudio_id": plan["id"]},
+        headers=origin_headers,
+    )
+    assert assigned.status_code == 409
+    assert "inactivo" in assigned.json()["detail"]
+

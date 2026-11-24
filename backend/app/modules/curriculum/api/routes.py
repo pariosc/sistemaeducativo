@@ -13,9 +13,12 @@ from app.modules.curriculum.schemas.curriculum import (
     FacultyPublic,
     FacultyUpdate,
     PlanCreate,
+    PlanDuplicate,
     PlanPublic,
     PlanSubjectCreate,
+    PlanSubjectsBulkCreate,
     PlanSubjectUpdate,
+    PlanUnitsGenerate,
     PlanUpdate,
     PrerequisiteCreate,
     StudentOpeningAssignment,
@@ -114,6 +117,15 @@ async def post_plan(payload: PlanCreate, _: AdminUser, db: DbSession):
     return service.create_plan(db, payload)
 
 
+@router.post(
+    "/plans/{plan_id}/duplicate",
+    response_model=PlanPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_plan_duplicate(plan_id: UUID, payload: PlanDuplicate, _: AdminUser, db: DbSession):
+    return service.duplicate_plan(db, plan_id, payload)
+
+
 @router.patch("/plans/{plan_id}", response_model=PlanPublic)
 async def patch_plan(plan_id: UUID, payload: PlanUpdate, _: AdminUser, db: DbSession):
     return service.update_plan(db, plan_id, payload)
@@ -130,6 +142,18 @@ async def remove_plan(plan_id: UUID, _: AdminUser, db: DbSession):
 )
 async def post_unit(plan_id: UUID, payload: UnitCreate, _: AdminUser, db: DbSession):
     return service.create_unit(db, plan_id, payload)
+
+
+@router.post("/plans/{plan_id}/units/generate", response_model=PlanPublic)
+async def post_generate_units(
+    plan_id: UUID, payload: PlanUnitsGenerate, _: AdminUser, db: DbSession
+):
+    return service.generate_units(db, plan_id, payload)
+
+
+@router.post("/plans/{plan_id}/units/renumber", response_model=PlanPublic)
+async def post_renumber_units(plan_id: UUID, _: AdminUser, db: DbSession):
+    return service.renumber_units(db, plan_id)
 
 
 @router.patch("/plans/{plan_id}/units/{unit_id}", response_model=UnitPublic)
@@ -150,6 +174,17 @@ async def remove_unit(plan_id: UUID, unit_id: UUID, _: AdminUser, db: DbSession)
 )
 async def post_plan_subject(plan_id: UUID, payload: PlanSubjectCreate, _: AdminUser, db: DbSession):
     return service.add_subject_to_plan(db, plan_id, payload)
+
+
+@router.post(
+    "/plans/{plan_id}/subjects/bulk",
+    response_model=PlanPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_plan_subjects_bulk(
+    plan_id: UUID, payload: PlanSubjectsBulkCreate, _: AdminUser, db: DbSession
+):
+    return service.add_subjects_to_plan(db, plan_id, payload)
 
 
 @router.patch("/plans/{plan_id}/subjects/{subject_plan_id}", response_model=PlanPublic)
