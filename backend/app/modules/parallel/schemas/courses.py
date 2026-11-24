@@ -86,8 +86,12 @@ class CoursePublic(BaseModel):
     materia_plan_id: uuid.UUID
     materia_codigo: str
     materia_nombre: str
+    plan_id: uuid.UUID
     plan_codigo: str
     plan_estado: EstadoPlan
+    carrera_id: uuid.UUID
+    carrera_codigo: str
+    carrera_nombre: str
     periodo_id: uuid.UUID
     periodo_denominacion: str
     paralelo: str

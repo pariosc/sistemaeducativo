@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.access.models.user import PerfilDocente, PerfilEstudiante, UserRole, Usuario
 from app.modules.curriculum.models.entities import (
+    Carrera,
     EstadoPlan,
     Materia,
     MateriaPlan,
@@ -304,6 +305,7 @@ def _validate_exception_bounds(db: Session, course: Curso) -> None:
 def _course_output(db: Session, course: Curso) -> CoursePublic:
     entry = db.get(MateriaPlan, course.materia_plan_id)
     plan = db.get(PlanEstudio, entry.plan_id)
+    career = db.get(Carrera, plan.carrera_id)
     subject = db.get(Materia, entry.materia_id)
     period = db.get(PeriodoAcademico, course.periodo_id)
     teacher = db.get(Usuario, course.docente_id) if course.docente_id else None
@@ -312,8 +314,12 @@ def _course_output(db: Session, course: Curso) -> CoursePublic:
         materia_plan_id=course.materia_plan_id,
         materia_codigo=subject.codigo,
         materia_nombre=subject.nombre,
+        plan_id=plan.id,
         plan_codigo=plan.codigo,
         plan_estado=plan.estado,
+        carrera_id=career.id,
+        carrera_codigo=career.codigo,
+        carrera_nombre=career.nombre,
         periodo_id=period.id,
         periodo_denominacion=period.denominacion,
         paralelo=course.paralelo,

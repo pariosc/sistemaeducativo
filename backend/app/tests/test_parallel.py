@@ -132,6 +132,18 @@ async def assert_report_download(client, code, output_format, **filters):
         assert response.content.startswith(b"PK\x03\x04")
 
 
+async def assert_report_preview(client, code, **filters):
+    response = await client.get(f"/api/v1/reports/{code}/preview", params=filters)
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    body = response.json()
+    assert body["code"] == code
+    assert body["row_count"] == len(body["rows"])
+    assert body["headers"]
+    return body
+
+
 async def test_period_dates_and_course_must_fit_period(client, origin_headers):
     await admin_login(client)
     invalid_period = await client.post(
@@ -408,9 +420,27 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
     assert [row["nota_final"] for row in own_grades.json()] == [50]
     unauthorized_report = await client.get("/api/v1/reports/RF33/export", params={"format": "pdf"})
     assert unauthorized_report.status_code == 403
+    unauthorized_preview = await client.get("/api/v1/reports/RF33/preview")
+    assert unauthorized_preview.status_code == 403
+    own_filters = {
+        "period_id": context["period"]["id"],
+        "estado_inscripcion": "ACTIVA",
+        "fecha_desde": "2026-12-01",
+        "fecha_hasta": "2026-12-31",
+    }
     for report_code in ("RF36", "RF37", "RF39"):
+        preview = await assert_report_preview(client, report_code, **own_filters)
+        assert preview["row_count"] >= 1
         for output_format in ("pdf", "xlsx"):
-            await assert_report_download(client, report_code, output_format)
+            await assert_report_download(client, report_code, output_format, **own_filters)
+    retired_filters = {**own_filters, "estado_inscripcion": "RETIRADA"}
+    retired = await assert_report_preview(client, "RF39", **retired_filters)
+    assert retired["row_count"] == 0
+    invalid_dates = await client.get(
+        "/api/v1/reports/RF39/preview",
+        params={"fecha_desde": "2026-12-31", "fecha_hasta": "2026-12-01"},
+    )
+    assert invalid_dates.status_code == 422
     notifications = await client.get("/api/v1/notifications")
     assert notifications.status_code == 200
     assert [item["tipo"] for item in notifications.json()] == ["INSCRIPCION"]
@@ -430,16 +460,43 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
 
     client.cookies.clear()
     await admin_login(client)
+    common_filters = {
+        "career_id": context["career"]["id"],
+        "plan_id": context["plan"]["id"],
+        "period_id": context["period"]["id"],
+        "fecha_desde": "2026-12-01",
+        "fecha_hasta": "2026-12-31",
+    }
     admin_reports = {
-        "RF33": {"career_id": context["career"]["id"], "plan_id": context["plan"]["id"]},
-        "RF34": {"student_id": student_id},
-        "RF35": {"course_id": context["course"]["id"]},
-        "RF38": {"course_id": context["course"]["id"]},
-        "RF40": {"teacher_id": context["teacher"]["id"]},
+        "RF33": {
+            "career_id": context["career"]["id"],
+            "plan_id": context["plan"]["id"],
+            "estado_plan": "VIGENTE",
+        },
+        "RF34": {**common_filters, "student_id": student_id, "estado_inscripcion": "ACTIVA"},
+        "RF35": {
+            **common_filters,
+            "course_id": context["course"]["id"],
+            "estado_inscripcion": "ACTIVA",
+        },
+        "RF38": {
+            **common_filters,
+            "course_id": context["course"]["id"],
+            "estado_inscripcion": "ACTIVA",
+        },
+        "RF40": {
+            **common_filters,
+            "teacher_id": context["teacher"]["id"],
+            "estado_paralelo": "ACTIVO",
+        },
     }
     for report_code, filters in admin_reports.items():
+        preview = await assert_report_preview(client, report_code, **filters)
+        assert preview["row_count"] >= 1
         for output_format in ("pdf", "xlsx"):
             await assert_report_download(client, report_code, output_format, **filters)
+    inactive_course = {**admin_reports["RF40"], "estado_paralelo": "INACTIVO"}
+    assert (await assert_report_preview(client, "RF40", **inactive_course))["row_count"] == 0
     changed_schedule = await client.put(
         f"/api/v1/admin/courses/{context['course']['id']}/schedules",
         json={"horarios": [{"dia_semana": "MARTES", "hora_inicio": "09:00", "hora_fin": "11:00"}]},

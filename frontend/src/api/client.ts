@@ -98,7 +98,9 @@ export type ScheduleExceptionType = "CANCELADA" | "REPROGRAMADA"
 export interface CourseSchedule { id: string; dia_semana: Weekday; hora_inicio: string; hora_fin: string; aula: string | null }
 export interface Course {
   id: string; materia_plan_id: string; materia_codigo: string; materia_nombre: string
-  plan_codigo: string; plan_estado: PlanState; periodo_id: string; periodo_denominacion: string
+  plan_id: string; plan_codigo: string; plan_estado: PlanState
+  carrera_id: string; carrera_codigo: string; carrera_nombre: string
+  periodo_id: string; periodo_denominacion: string
   paralelo: string; cupo: number; fecha_inicio: string; fecha_fin: string
   docente_id: string | null; docente_nombre: string | null; inscripcion_abierta: boolean
   activo: boolean; horarios: CourseSchedule[]
@@ -135,7 +137,27 @@ export interface Grade {
   nota_final: number; fecha_registro: string
 }
 export type ReportCode = "RF33" | "RF34" | "RF35" | "RF36" | "RF37" | "RF38" | "RF39" | "RF40"
-export type ReportFilters = { career_id?: string; plan_id?: string; student_id?: string; course_id?: string; teacher_id?: string }
+export type ReportFilters = {
+  career_id?: string
+  plan_id?: string
+  student_id?: string
+  course_id?: string
+  teacher_id?: string
+  period_id?: string
+  estado_inscripcion?: "ACTIVA" | "RETIRADA"
+  estado_paralelo?: "ACTIVO" | "INACTIVO"
+  estado_plan?: PlanState
+  fecha_desde?: string
+  fecha_hasta?: string
+}
+export interface ReportPreview {
+  code: ReportCode
+  title: string
+  headers: string[]
+  rows: (string | number | null)[][]
+  row_count: number
+  generated_at: string
+}
 export interface AcademicNotification {
   id: string; curso_id: string | null; tipo: "INSCRIPCION" | "CAMBIO_HORARIO" | "CALIFICACION" | "GENERAL"
   titulo: string; mensaje: string; fecha_creacion: string; leida: boolean
@@ -198,6 +220,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) throw new ApiError(response.status, await readError(response, "No se pudo completar la solicitud."))
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+function reportQuery(filters: ReportFilters, format?: "pdf" | "xlsx") {
+  const params = new URLSearchParams()
+  if (format) params.set("format", format)
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value)
+  })
+  return params
 }
 
 export const api = {
@@ -320,8 +351,10 @@ export const api = {
   listNotifications: (limit = 50) => request<AcademicNotification[]>(`/api/v1/notifications?limit=${limit}`),
   markNotificationRead: (id: string) =>
     request<AcademicNotification>(`/api/v1/notifications/${id}/read`, { method: "PATCH" }),
+  previewReport: (code: ReportCode, filters: ReportFilters, signal?: AbortSignal) =>
+    request<ReportPreview>(`/api/v1/reports/${code}/preview?${reportQuery(filters).toString()}`, { signal }),
   exportReport: async (code: ReportCode, format: "pdf" | "xlsx", filters: ReportFilters) => {
-    const query = new URLSearchParams({ format, ...filters })
+    const query = reportQuery(filters, format)
     const response = await fetch(`/api/v1/reports/${code}/export?${query.toString()}`, { credentials: "include" })
     if (!response.ok) {
       throw new ApiError(response.status, await readError(response, "No se pudo generar el reporte."))

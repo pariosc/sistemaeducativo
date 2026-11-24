@@ -246,7 +246,7 @@ El panel y la actividad reciente se limitan al alcance de cada rol. La inscripci
 
 #### RN17 Reportes
 
-Los ocho reportes RF33–RF40 se generan en PDF y Excel. El administrador consulta el ámbito académico general permitido; el docente solo sus paralelos, estudiantes y notas relacionados; el estudiante solo información propia. El backend aplica los mismos filtros de autorización al visualizar y exportar.
+Los ocho reportes RF33–RF40 pueden consultarse primero en una vista previa en pantalla, imprimirse desde la tabla mostrada y generarse en PDF y Excel. Impresión y exportaciones usan el mismo conjunto de datos y filtros. Además de los filtros originales por carrera/plan, estudiante, paralelo o docente, se confirman filtros opcionales de periodo académico, estado académico, rango de fechas y carrera/plan en más reportes. El estado académico aplica según el reporte: estado del plan en RF33, estado de inscripción en RF34–RF39 y estado del paralelo en RF40. Carrera/plan filtran el plan asignado del estudiante en RF34–RF39 y el plan de la materia en RF40. El rango de fechas usa solapamiento con el periodo académico en RF34–RF39 y con las fechas del paralelo en RF40. El administrador consulta el ámbito académico general permitido; el docente solo sus paralelos, estudiantes y notas relacionados; el estudiante solo información propia. El backend aplica los mismos filtros de autorización a la vista previa, la impresión y la exportación.
 
 #### RN18 Conservación histórica
 
@@ -1012,15 +1012,15 @@ Usuarios: Administrador, Docente y Estudiante según permisos
 
 Ruta propuesta: /reportes
 
-Objetivo: Consultar y descargar reportes autorizados.
+Objetivo: Consultar, revisar, imprimir y descargar reportes autorizados.
 
-Funcionalidades: Selección de uno de ocho reportes, filtros según tipo y rol y exportación PDF/Excel.
+Funcionalidades: Selección de uno de ocho reportes, filtros según tipo y rol, vista previa en tabla, impresión de esa tabla y exportación PDF/Excel.
 
-Acciones y botones previstos: Seleccionar reporte; aplicar filtros; consultar; descargar PDF; descargar Excel.
+Acciones y botones previstos: Seleccionar reporte; aplicar filtros; consultar vista previa; imprimir; descargar PDF; descargar Excel. La impresión y las descargas permanecen deshabilitadas hasta consultar la vista previa con los filtros vigentes.
 
-Campos principales: Tipo, carrera/plan, estudiante, paralelo o docente cuando corresponda; resultados. La selección concreta depende del reporte.
+Campos principales: Tipo, carrera/plan, estudiante, paralelo o docente cuando corresponda; periodo académico, estado académico, rango de fechas y carrera/plan adicionales; resultados. La selección concreta depende del reporte.
 
-Validaciones: Administrador: RF33–35,38,40; docente: RF34,35,38,40 propios; estudiante: RF36,37,39 propios. Validar filtros y descarga en backend.
+Validaciones: Administrador: RF33–35,38,40; docente: RF34,35,38,40 propios; estudiante: RF36,37,39 propios. Validar filtros, vista previa, impresión y descarga en backend con la misma autorización.
 
 RF relacionados: RF33, RF34, RF35, RF36, RF37, RF38, RF39, RF40
 

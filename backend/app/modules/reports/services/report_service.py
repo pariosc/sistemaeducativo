@@ -1,4 +1,6 @@
+from datetime import date
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.modules.access.models.user import PerfilEstudiante, UserRole, Usuario
 from app.modules.curriculum.models.entities import (
     Carrera,
+    EstadoPlan,
     Materia,
     MateriaPlan,
     PlanEstudio,
@@ -17,6 +20,10 @@ from app.modules.enrollments.models.entities import EstadoInscripcion, Inscripci
 from app.modules.grades.models.entities import Calificacion
 from app.modules.parallel.models.entities import Curso
 from app.modules.periods.models.entities import PeriodoAcademico
+
+EnrollmentStatus = Literal["ACTIVA", "RETIRADA"]
+CourseStatus = Literal["ACTIVO", "INACTIVO"]
+PlanStatus = Literal["BORRADOR", "VIGENTE", "INACTIVO"]
 
 
 class ReportCode(StrEnum):
@@ -71,6 +78,26 @@ def _required(value: UUID | None, label: str) -> UUID:
     return value
 
 
+def _validate_dates(fecha_desde: date | None, fecha_hasta: date | None) -> None:
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(
+            status_code=422, detail="La fecha desde no puede ser mayor a la fecha hasta"
+        )
+
+
+def _validate_optional_plan_filters(
+    db: Session, career_id: UUID | None, plan_id: UUID | None
+) -> None:
+    career = db.get(Carrera, career_id) if career_id else None
+    if career_id and not career:
+        raise HTTPException(status_code=404, detail="Carrera no encontrada")
+    plan = db.get(PlanEstudio, plan_id) if plan_id else None
+    if plan_id and not plan:
+        raise HTTPException(status_code=404, detail="Plan de estudio no encontrado")
+    if career and plan and plan.carrera_id != career.id:
+        raise HTTPException(status_code=404, detail="Plan no encontrado para la carrera")
+
+
 def _course_for_report(db: Session, user: Usuario, course_id: UUID | None) -> Curso:
     identifier = _required(course_id, "un paralelo")
     course = db.get(Curso, identifier)
@@ -85,6 +112,12 @@ def _enrollment_report_rows(
     course_id: UUID | None = None,
     student_id: UUID | None = None,
     teacher_id: UUID | None = None,
+    career_id: UUID | None = None,
+    plan_id: UUID | None = None,
+    period_id: UUID | None = None,
+    enrollment_status: EnrollmentStatus | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
     active_only: bool = True,
     grades_only: bool = False,
 ):
@@ -101,6 +134,8 @@ def _enrollment_report_rows(
             Calificacion.nota_final,
         )
         .join(PerfilEstudiante, PerfilEstudiante.usuario_id == Inscripcion.estudiante_id)
+        .outerjoin(PlanEstudio, PlanEstudio.id == PerfilEstudiante.plan_estudio_id)
+        .outerjoin(Carrera, Carrera.id == PlanEstudio.carrera_id)
         .join(Usuario, Usuario.id == PerfilEstudiante.usuario_id)
         .join(Curso, Curso.id == Inscripcion.curso_id)
         .join(PeriodoAcademico, PeriodoAcademico.id == Curso.periodo_id)
@@ -108,7 +143,9 @@ def _enrollment_report_rows(
         .join(Materia, Materia.id == MateriaPlan.materia_id)
         .outerjoin(Calificacion, Calificacion.inscripcion_id == Inscripcion.id)
     )
-    if active_only:
+    if enrollment_status is not None:
+        query = query.where(Inscripcion.estado == EstadoInscripcion(enrollment_status))
+    elif active_only:
         query = query.where(Inscripcion.estado == EstadoInscripcion.ACTIVA)
     if grades_only:
         query = query.where(Calificacion.id.is_not(None))
@@ -118,6 +155,16 @@ def _enrollment_report_rows(
         query = query.where(Inscripcion.estudiante_id == student_id)
     if teacher_id is not None:
         query = query.where(Curso.docente_id == teacher_id)
+    if career_id is not None:
+        query = query.where(PlanEstudio.carrera_id == career_id)
+    if plan_id is not None:
+        query = query.where(PerfilEstudiante.plan_estudio_id == plan_id)
+    if period_id is not None:
+        query = query.where(Curso.periodo_id == period_id)
+    if fecha_desde is not None:
+        query = query.where(PeriodoAcademico.fecha_fin >= fecha_desde)
+    if fecha_hasta is not None:
+        query = query.where(PeriodoAcademico.fecha_inicio <= fecha_hasta)
     return db.execute(
         query.order_by(
             PeriodoAcademico.fecha_inicio,
@@ -139,22 +186,45 @@ def build_report(
     student_id: UUID | None = None,
     course_id: UUID | None = None,
     teacher_id: UUID | None = None,
+    period_id: UUID | None = None,
+    estado_inscripcion: EnrollmentStatus | None = None,
+    estado_paralelo: CourseStatus | None = None,
+    estado_plan: PlanStatus | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
 ) -> tuple[str, list[str], list[list[object]]]:
     if code not in reports_for_role(user.rol):
         raise HTTPException(status_code=403, detail="No tienes permiso para generar este reporte")
+    _validate_dates(fecha_desde, fecha_hasta)
+    if code != ReportCode.MATERIAS_POR_PLAN:
+        _validate_optional_plan_filters(db, career_id, plan_id)
+        if period_id and not db.get(PeriodoAcademico, period_id):
+            raise HTTPException(status_code=404, detail="Periodo académico no encontrado")
+
+    enrollment_filters = {
+        "career_id": career_id,
+        "plan_id": plan_id,
+        "period_id": period_id,
+        "enrollment_status": estado_inscripcion,
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+    }
 
     if code == ReportCode.MATERIAS_POR_PLAN:
         career = db.get(Carrera, _required(career_id, "una carrera"))
         plan = db.get(PlanEstudio, _required(plan_id, "un plan de estudio"))
         if not career or not plan or plan.carrera_id != career.id:
             raise HTTPException(status_code=404, detail="Plan no encontrado para la carrera")
-        rows = db.execute(
+        query = (
             select(Materia.codigo, Materia.nombre, UnidadPlan.numero, UnidadPlan.nombre)
             .join(MateriaPlan, MateriaPlan.materia_id == Materia.id)
+            .join(PlanEstudio, PlanEstudio.id == MateriaPlan.plan_id)
             .join(UnidadPlan, UnidadPlan.id == MateriaPlan.unidad_id)
             .where(MateriaPlan.plan_id == plan.id)
-            .order_by(UnidadPlan.numero, Materia.codigo)
-        ).all()
+        )
+        if estado_plan is not None:
+            query = query.where(PlanEstudio.estado == EstadoPlan(estado_plan))
+        rows = db.execute(query.order_by(UnidadPlan.numero, Materia.codigo)).all()
         return (
             f"Materias de {career.nombre} — Plan {plan.codigo}",
             ["Código", "Materia", "Unidad N°", "Unidad"],
@@ -171,6 +241,7 @@ def build_report(
             teacher_id=user.id if user.rol == UserRole.DOCENTE else None,
             active_only=False,
             grades_only=True,
+            **enrollment_filters,
         )
         return (
             "Notas del estudiante",
@@ -182,7 +253,9 @@ def build_report(
         course = _course_for_report(db, user, course_id)
         subject_entry = db.get(MateriaPlan, course.materia_plan_id)
         subject = db.get(Materia, subject_entry.materia_id)
-        rows = _enrollment_report_rows(db, course_id=course.id, active_only=True)
+        rows = _enrollment_report_rows(
+            db, course_id=course.id, active_only=True, **enrollment_filters
+        )
         if code == ReportCode.NOTAS_PARALELO:
             return (
                 f"Notas — {subject.codigo} paralelo {course.paralelo}",
@@ -196,7 +269,9 @@ def build_report(
         )
 
     if code == ReportCode.HISTORIAL_PROPIO:
-        rows = _enrollment_report_rows(db, student_id=user.id, active_only=False)
+        rows = _enrollment_report_rows(
+            db, student_id=user.id, active_only=False, **enrollment_filters
+        )
         return (
             "Historial académico propio",
             ["Periodo", "Código", "Materia", "Paralelo", "Estado", "Nota final"],
@@ -214,7 +289,9 @@ def build_report(
         )
 
     if code == ReportCode.NOTAS_PROPIAS:
-        rows = _enrollment_report_rows(db, student_id=user.id, active_only=False, grades_only=True)
+        rows = _enrollment_report_rows(
+            db, student_id=user.id, active_only=False, grades_only=True, **enrollment_filters
+        )
         return (
             "Calificaciones propias",
             ["Periodo", "Código", "Materia", "Paralelo", "Nota final"],
@@ -222,7 +299,9 @@ def build_report(
         )
 
     if code == ReportCode.MATERIAS_INSCRITAS:
-        rows = _enrollment_report_rows(db, student_id=user.id, active_only=True)
+        rows = _enrollment_report_rows(
+            db, student_id=user.id, active_only=True, **enrollment_filters
+        )
         return (
             "Materias inscritas propias",
             ["Periodo", "Código", "Materia", "Paralelo"],
@@ -236,7 +315,7 @@ def build_report(
         teacher = db.get(Usuario, identifier)
         if not teacher or teacher.rol != UserRole.DOCENTE:
             raise HTTPException(status_code=404, detail="Docente no encontrado")
-        rows = db.execute(
+        query = (
             select(
                 PeriodoAcademico.denominacion,
                 Materia.codigo,
@@ -247,9 +326,25 @@ def build_report(
             )
             .join(Curso, Curso.periodo_id == PeriodoAcademico.id)
             .join(MateriaPlan, MateriaPlan.id == Curso.materia_plan_id)
+            .join(PlanEstudio, PlanEstudio.id == MateriaPlan.plan_id)
+            .join(Carrera, Carrera.id == PlanEstudio.carrera_id)
             .join(Materia, Materia.id == MateriaPlan.materia_id)
             .where(Curso.docente_id == identifier)
-            .order_by(PeriodoAcademico.fecha_inicio, Materia.codigo, Curso.paralelo)
+        )
+        if career_id is not None:
+            query = query.where(Carrera.id == career_id)
+        if plan_id is not None:
+            query = query.where(MateriaPlan.plan_id == plan_id)
+        if period_id is not None:
+            query = query.where(Curso.periodo_id == period_id)
+        if estado_paralelo is not None:
+            query = query.where(Curso.activo == (estado_paralelo == "ACTIVO"))
+        if fecha_desde is not None:
+            query = query.where(Curso.fecha_fin >= fecha_desde)
+        if fecha_hasta is not None:
+            query = query.where(Curso.fecha_inicio <= fecha_hasta)
+        rows = db.execute(
+            query.order_by(PeriodoAcademico.fecha_inicio, Materia.codigo, Curso.paralelo)
         ).all()
         return (
             f"Materias asignadas a {teacher.nombres} {teacher.apellidos}",

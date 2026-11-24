@@ -1,11 +1,11 @@
 /* Marco y catálogos de Currículo (Facultades, Carreras, Materias). */
 
-.cx .ui-section-nav { display: flex; flex-wrap: wrap; gap: 6px; width: fit-content; max-width: 100%; margin-bottom: 30px; padding: 6px; border: 1px solid var(--cx-line); border-radius: 14px; background: #fff; box-shadow: var(--cx-shadow); }
+.cx .ui-section-nav { display: flex; flex-wrap: wrap; gap: 6px; width: fit-content; max-width: 100%; margin-bottom: 30px; padding: 6px; border: 1px solid var(--cx-line); border-radius: 14px; background: var(--cx-surface); box-shadow: var(--cx-shadow); }
 .cx .ui-nav-link { display: inline-flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 16px 8px 10px; border-radius: 10px; color: var(--cx-muted); font-size: 14px; font-weight: 700; text-decoration: none; }
-.cx .ui-nav-link:hover { background: #eef2fa; color: var(--cx-ink); }
-.cx .ui-nav-link[aria-current="page"] { background: var(--cx-brand); color: #fff; }
+.cx .ui-nav-link:hover { background: var(--cx-surface-muted); color: var(--cx-ink); }
+.cx .ui-nav-link[aria-current="page"] { background: var(--cx-brand); color: var(--cx-fixed-dark-ink); }
 .cx .ui-nav-step { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--cx-gray-soft); color: var(--cx-gray-ink); font-size: 12px; font-weight: 800; }
-.cx .ui-nav-link[aria-current="page"] .ui-nav-step { background: #fff; color: var(--cx-brand-dark); }
+.cx .ui-nav-link[aria-current="page"] .ui-nav-step { background: var(--cx-surface); color: var(--cx-brand-dark); }
 
 .cx .cat-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 20px; padding: 18px 20px; border-bottom: 1px solid var(--cx-line); }
 .cx .cat-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0; color: var(--cx-muted); font-size: 14px; }

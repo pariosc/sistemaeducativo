@@ -38,6 +38,7 @@
   --cx-line-strong: #4a5b7c;
   --cx-surface: #141d2e;
   --cx-canvas: #0b1220;
+  --cx-surface-muted: #1b263b;
   --cx-brand: #8fb4ff;
   --cx-brand-dark: #b8d0ff;
   --cx-brand-soft: #1d2b49;
@@ -55,6 +56,17 @@
   --cx-gray-soft: #233049;
   --cx-gray-ink: #cbd5e8;
   --cx-focus: #9dc0ff;
+  --cx-role-principal-bg: #24365d;
+  --cx-role-principal-ink: #c9d9ff;
+  --cx-role-admin-bg: #223152;
+  --cx-role-admin-ink: #c7d6f5;
+  --cx-role-docente-bg: #2e2755;
+  --cx-role-docente-ink: #ddd1ff;
+  --cx-role-estudiante-bg: #173b38;
+  --cx-role-estudiante-ink: #b7ece5;
+  --cx-hero-ink: #f8faff;
+  --cx-hero-muted: #dbe5ff;
+  --cx-fixed-dark-ink: #0b1220;
   --cx-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 22%);
   background: var(--cx-canvas);
 }
@@ -187,6 +199,10 @@
   color: var(--cx-red-ink);
 }
 
+.dark .form-input[aria-invalid="true"] {
+  border-color: #f87171;
+}
+
 .dark .success-note {
   color: #86efac;
 }
@@ -263,6 +279,7 @@
 }
 
 .dark .cx .kb-card {
+  border-color: var(--cx-line-strong);
   background: var(--cx-brand-soft);
   color: var(--cx-ink);
 }
@@ -328,6 +345,10 @@
 
 .dark .dashboard-shortcut:hover {
   background: var(--cx-surface-2, #1b263b);
+}
+
+.dark .plan-tab {
+  color: var(--muted);
 }
 
 .dark .plan-tab:hover {

@@ -198,6 +198,24 @@ P03/P09, RF24–RF25/RF31/RF43, modelo físico y pruebas T24/T25/T31/T43.
   reportes en PDF y XLSX con filtros de rol; falta abrirlos en una aplicación
   ofimática y revisar visualmente el formato.
 
+### 23-11-2026 — Vista previa, impresión y filtros ampliados
+
+- A solicitud del usuario, los reportes ahora muestran una vista previa en
+  tabla antes de imprimir o exportar. La impresión usa estilos propios para
+  conservar únicamente esa tabla y sus encabezados.
+- Se agregó `GET /api/v1/reports/{report_code}/preview` con el mismo conjunto
+  de datos y autorización que la exportación. `P13` y `RN17` registran la
+  decisión; no se crearon reglas académicas ni permisos nuevos.
+- Se conservaron los filtros existentes y se agregaron periodo académico,
+  estado académico, rango de fechas y carrera/plan en más reportes. El estado
+  aplica por reporte: plan en RF33, inscripción en RF34–RF39 y paralelo en
+  RF40. Las fechas se interpretan por solapamiento con el periodo en
+  RF34–RF39 y con el paralelo en RF40.
+- Ruff, compilación Python, typecheck y compilación Vite aprobaron. Las 18
+  pruebas pasaron con SQLite en un entorno aislado porque AppLocker bloquea
+  `_sqlite3` del Python 3.14 del proyecto en esta máquina. Falta revisión
+  visual de la vista previa y de la impresión en navegador.
+
 ## Fase 7 — Paneles, avisos e integración
 
 ### 17-11-2026 — Panel por rol y notificaciones internas
