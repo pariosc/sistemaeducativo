@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Time,
@@ -39,9 +40,13 @@ class Aula(Base):
     """Catálogo simple de aulas identificadas por el código visible en campus."""
 
     __tablename__ = "aulas"
-    __table_args__ = (CheckConstraint("codigo = upper(codigo)", name="ck_aula_codigo_mayusculas"),)
+    __table_args__ = (
+        CheckConstraint("codigo = upper(codigo)", name="ck_aula_codigo_mayusculas"),
+        CheckConstraint("capacidad IS NULL OR capacidad > 0", name="ck_aula_capacidad_positiva"),
+    )
 
     codigo: Mapped[str] = mapped_column(String(120), primary_key=True)
+    capacidad: Mapped[int | None] = mapped_column(Integer, nullable=True)
     activa: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
@@ -54,6 +59,13 @@ class BloqueHorario(Base):
     __table_args__ = (
         UniqueConstraint("turno", "nombre", name="uq_bloque_turno_nombre"),
         CheckConstraint("hora_fin > hora_inicio", name="ck_bloque_horario_intervalo_valido"),
+        Index(
+            "uq_bloque_predeterminado_modular_turno",
+            "turno",
+            unique=True,
+            sqlite_where=text("predeterminado_modular = true"),
+            postgresql_where=text("predeterminado_modular = true"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -61,7 +73,28 @@ class BloqueHorario(Base):
     nombre: Mapped[str] = mapped_column(String(48), nullable=False)
     hora_inicio: Mapped[time] = mapped_column(Time, nullable=False)
     hora_fin: Mapped[time] = mapped_column(Time, nullable=False)
+    predeterminado_modular: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     activo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
+class PlantillaModular(Base):
+    """Valores reutilizables de duración; los paralelos guardan su propia programación."""
+
+    __tablename__ = "plantillas_modulares"
+    __table_args__ = (
+        CheckConstraint("clases_por_modulo > 0", name="ck_plantilla_clases_positivas"),
+        CheckConstraint("minutos_por_clase > 0", name="ck_plantilla_minutos_positivos"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    clases_por_modulo: Mapped[int] = mapped_column(Integer, nullable=False)
+    minutos_por_clase: Mapped[int] = mapped_column(Integer, nullable=False)
+    activa: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
 
@@ -76,6 +109,10 @@ class Curso(Base):
         CheckConstraint("fecha_fin >= fecha_inicio", name="ck_curso_fechas_validas"),
         CheckConstraint("paralelo = upper(paralelo)", name="ck_curso_paralelo_mayusculas"),
         CheckConstraint("activo OR NOT inscripcion_abierta", name="ck_curso_inactivo_cerrado"),
+        CheckConstraint(
+            "turno_modular IS NULL OR turno_modular IN ('MADRUGADA', 'MANANA', 'TARDE', 'NOCHE')",
+            name="ck_curso_turno_modular_valido",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -91,6 +128,19 @@ class Curso(Base):
         nullable=False,
         index=True,
     )
+    apertura_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("aperturas_plan.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    plantilla_modular_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("plantillas_modulares.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    turno_modular: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    clases_objetivo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     paralelo: Mapped[str] = mapped_column(String(32), nullable=False)
     cupo: Mapped[int] = mapped_column(Integer, nullable=False)
     fecha_inicio: Mapped[date] = mapped_column(Date, nullable=False)

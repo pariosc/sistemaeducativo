@@ -12,16 +12,26 @@ ShiftName = Literal["MADRUGADA", "MANANA", "TARDE", "NOCHE"]
 class RoomCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     codigo: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9 -]*$")
+    capacidad: int = Field(ge=1)
 
 
 class RoomUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    activa: StrictFlag
+    activa: StrictFlag | None = None
+    capacidad: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def valid_update(self):
+        values = self.model_dump(exclude_unset=True)
+        if not values or any(value is None for value in values.values()):
+            raise ValueError("Envía al menos un valor no nulo")
+        return self
 
 
 class RoomPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     codigo: str
+    capacidad: int | None
     activa: bool
 
 
@@ -31,6 +41,7 @@ class ScheduleBlockCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=48)
     hora_inicio: time
     hora_fin: time
+    predeterminado_modular: StrictFlag = False
 
     @model_validator(mode="after")
     def valid_range(self):
@@ -45,6 +56,7 @@ class ScheduleBlockUpdate(BaseModel):
     hora_inicio: time | None = None
     hora_fin: time | None = None
     activo: StrictFlag | None = None
+    predeterminado_modular: StrictFlag | None = None
 
     @model_validator(mode="after")
     def valid_update(self):
@@ -68,3 +80,35 @@ class ScheduleBlockPublic(BaseModel):
     hora_inicio: time
     hora_fin: time
     activo: bool
+    predeterminado_modular: bool
+
+
+class ModularTemplateCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=1, max_length=120)
+    clases_por_modulo: int = Field(ge=1, le=366)
+    minutos_por_clase: int = Field(ge=1, le=1439)
+
+
+class ModularTemplateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    clases_por_modulo: int | None = Field(default=None, ge=1, le=366)
+    minutos_por_clase: int | None = Field(default=None, ge=1, le=1439)
+    activa: StrictFlag | None = None
+
+    @model_validator(mode="after")
+    def valid_update(self):
+        values = self.model_dump(exclude_unset=True)
+        if not values or any(value is None for value in values.values()):
+            raise ValueError("Envía al menos un valor no nulo")
+        return self
+
+
+class ModularTemplatePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    nombre: str
+    clases_por_modulo: int
+    minutos_por_clase: int
+    activa: bool

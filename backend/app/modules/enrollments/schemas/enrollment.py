@@ -42,6 +42,7 @@ class CourseOffer(BaseModel):
     semestre_numero: int
     semestre_nombre: str
     cupos_disponibles: int
+    aula_habilitada: bool
     inscrito: bool
     prerrequisitos_pendientes: list[PrerequisitePending]
 

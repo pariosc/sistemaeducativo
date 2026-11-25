@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import pytest
 
 pytestmark = pytest.mark.anyio
@@ -13,7 +16,15 @@ async def admin_login(client):
     assert response.status_code == 200
 
 
-async def create_course_context(client, schedule=True):
+async def create_course_context(
+    client,
+    schedule=True,
+    *,
+    period_start="2026-12-01",
+    period_end="2026-12-31",
+    course_start="2026-12-07",
+    course_end="2026-12-31",
+):
     faculty = await client.post(
         "/api/v1/admin/faculties", json={"codigo": "TEC", "nombre": "Tecnología"}, headers=ORIGIN
     )
@@ -58,8 +69,8 @@ async def create_course_context(client, schedule=True):
         "/api/v1/admin/periods",
         json={
             "denominacion": "Periodo de prueba",
-            "fecha_inicio": "2026-12-01",
-            "fecha_fin": "2026-12-31",
+            "fecha_inicio": period_start,
+            "fecha_fin": period_end,
         },
         headers=ORIGIN,
     )
@@ -97,18 +108,31 @@ async def create_course_context(client, schedule=True):
             "periodo_id": period.json()["id"],
             "paralelo": "A",
             "cupo": 20,
-            "fecha_inicio": "2026-12-07",
-            "fecha_fin": "2026-12-31",
+            "fecha_inicio": course_start,
+            "fecha_fin": course_end,
             "docente_id": teacher.json()["id"],
         },
         headers=ORIGIN,
     )
     assert course.status_code == 201, course.text
     if schedule:
+        room = await client.post(
+            "/api/v1/admin/planning/rooms",
+            json={"codigo": "BASE", "capacidad": 40},
+            headers=ORIGIN,
+        )
+        assert room.status_code == 201, room.text
         scheduled = await client.put(
             f"/api/v1/admin/courses/{course.json()['id']}/schedules",
             json={
-                "horarios": [{"dia_semana": "LUNES", "hora_inicio": "08:00", "hora_fin": "10:00"}]
+                "horarios": [
+                    {
+                        "dia_semana": "LUNES",
+                        "hora_inicio": "08:00",
+                        "hora_fin": "10:00",
+                        "aula": "BASE",
+                    }
+                ]
             },
             headers=ORIGIN,
         )
@@ -126,6 +150,302 @@ async def create_course_context(client, schedule=True):
         "teacher": teacher.json(),
         "course": course_data,
     }
+
+
+async def test_bulk_registration_is_atomic_and_scoped_to_period(client):
+    await admin_login(client)
+    context = await create_course_context(client)
+    period_id = context["period"]["id"]
+    first_id = context["course"]["id"]
+    second = await client.post(
+        "/api/v1/admin/courses",
+        json={
+            "materia_plan_id": context["entry"]["id"],
+            "periodo_id": period_id,
+            "paralelo": "B",
+            "cupo": 20,
+            "fecha_inicio": "2026-12-07",
+            "fecha_fin": "2026-12-31",
+        },
+        headers=ORIGIN,
+    )
+    assert second.status_code == 201, second.text
+    second_id = second.json()["id"]
+    endpoint = f"/api/v1/admin/periods/{period_id}/courses/registration"
+    rejected = await client.patch(
+        endpoint,
+        json={"curso_ids": [first_id, second_id], "inscripcion_abierta": True},
+        headers=ORIGIN,
+    )
+    assert rejected.status_code == 409
+    listed = (await client.get("/api/v1/courses")).json()
+    assert all(not row["inscripcion_abierta"] for row in listed)
+
+    another_teacher = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "T-10002",
+            "nombres": "Segundo",
+            "apellidos": "Docente",
+            "correo": "teacher.second@example.edu",
+            "telefono": "70000012",
+            "rol": "DOCENTE",
+        },
+        headers=ORIGIN,
+    )
+    assert another_teacher.status_code == 201
+    assigned = await client.patch(
+        f"/api/v1/admin/courses/{second_id}",
+        json={"docente_id": another_teacher.json()["id"]},
+        headers=ORIGIN,
+    )
+    assert assigned.status_code == 200, assigned.text
+    room = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "OTHER", "capacidad": 30},
+        headers=ORIGIN,
+    )
+    assert room.status_code == 201
+    scheduled = await client.put(
+        f"/api/v1/admin/courses/{second_id}/schedules",
+        json={
+            "horarios": [
+                {
+                    "dia_semana": "LUNES",
+                    "hora_inicio": "08:00",
+                    "hora_fin": "10:00",
+                    "aula": "OTHER",
+                }
+            ]
+        },
+        headers=ORIGIN,
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    opened = await client.patch(
+        endpoint,
+        json={"curso_ids": [first_id, second_id], "inscripcion_abierta": True},
+        headers=ORIGIN,
+    )
+    assert opened.status_code == 200, opened.text
+    assert all(row["inscripcion_abierta"] for row in opened.json())
+    closed = await client.patch(
+        endpoint,
+        json={"curso_ids": [first_id, second_id], "inscripcion_abierta": False},
+        headers=ORIGIN,
+    )
+    assert closed.status_code == 200, closed.text
+    assert all(not row["inscripcion_abierta"] for row in closed.json())
+
+
+async def test_combined_offer_overview_and_dated_calendar(client, origin_headers):
+    await admin_login(client)
+    context = await create_course_context(client)
+    period_id = context["period"]["id"]
+    course_id = context["course"]["id"]
+
+    overview = await client.get(f"/api/v1/admin/periods/{period_id}/planning/overview")
+    assert overview.status_code == 200, overview.text
+    assert len(overview.json()) == 1
+    subject = overview.json()[0]
+    assert subject["facultad_nombre"] == "Tecnología"
+    assert subject["carrera_id"] == context["career"]["id"]
+    assert subject["plan_id"] == context["plan"]["id"]
+    assert subject["plan_modalidad"] == "SEMESTRAL"
+    assert subject["materia_plan_id"] == context["entry"]["id"]
+    assert subject["paralelos"] == 1
+
+    url = f"/api/v1/admin/periods/{period_id}/calendar"
+    first_week = await client.get(url, params={"week_start": "2026-12-07"})
+    assert first_week.status_code == 200, first_week.text
+    assert first_week.json() == [
+        {
+            "curso_id": course_id,
+            "fecha": "2026-12-07",
+            "hora_inicio": "08:00:00",
+            "hora_fin": "10:00:00",
+            "aula": "BASE",
+            "reprogramada": False,
+        }
+    ]
+
+    exception = await client.post(
+        f"/api/v1/admin/courses/{course_id}/exceptions",
+        json={
+            "fecha_original": "2026-12-07",
+            "tipo": "REPROGRAMADA",
+            "fecha_reprogramada": "2026-12-08",
+            "hora_inicio": "09:00",
+            "hora_fin": "11:00",
+            "aula": "BASE",
+        },
+        headers=origin_headers,
+    )
+    assert exception.status_code == 201, exception.text
+    rescheduled_week = await client.get(url, params={"week_start": "2026-12-07"})
+    assert rescheduled_week.status_code == 200, rescheduled_week.text
+    assert [(item["fecha"], item["reprogramada"]) for item in rescheduled_week.json()] == [
+        ("2026-12-08", True)
+    ]
+
+    holiday = await client.post(
+        f"/api/v1/admin/periods/{period_id}/holidays",
+        json={"fecha": "2026-12-14", "descripcion": "Feriado de prueba"},
+        headers=origin_headers,
+    )
+    assert holiday.status_code == 201, holiday.text
+    holiday_week = await client.get(url, params={"week_start": "2026-12-14"})
+    assert holiday_week.status_code == 200, holiday_week.text
+    assert holiday_week.json() == []
+
+    client.cookies.clear()
+    assert (await client.get(url, params={"week_start": "2026-12-07"})).status_code == 401
+    assert (
+        await client.get(f"/api/v1/admin/periods/{period_id}/planning/overview")
+    ).status_code == 401
+
+
+async def test_availability_includes_other_periods_and_effective_dates(client, origin_headers):
+    await admin_login(client)
+    context = await create_course_context(client)
+    second_period = await client.post(
+        "/api/v1/admin/periods",
+        json={
+            "denominacion": "Periodo superpuesto",
+            "fecha_inicio": "2026-12-01",
+            "fecha_fin": "2026-12-31",
+        },
+        headers=origin_headers,
+    )
+    assert second_period.status_code == 201, second_period.text
+    second_id = second_period.json()["id"]
+    assert (
+        await client.post(
+            f"/api/v1/admin/periods/{second_id}/careers",
+            json={"carrera_id": context["career"]["id"]},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    assert (
+        await client.post(
+            f"/api/v1/admin/periods/{second_id}/plans",
+            json={"plan_id": context["plan"]["id"]},
+            headers=origin_headers,
+        )
+    ).status_code == 200
+    teacher = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "T-10004",
+            "nombres": "Otro",
+            "apellidos": "Docente",
+            "correo": "teacher.parallel4@example.edu",
+            "telefono": "70000014",
+            "rol": "DOCENTE",
+        },
+        headers=origin_headers,
+    )
+    assert teacher.status_code == 201, teacher.text
+    room = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "OTHER", "capacidad": 30},
+        headers=origin_headers,
+    )
+    assert room.status_code == 201, room.text
+    second_course = await client.post(
+        "/api/v1/admin/courses",
+        json={
+            "materia_plan_id": context["entry"]["id"],
+            "periodo_id": second_id,
+            "paralelo": "B",
+            "cupo": 20,
+            "fecha_inicio": "2026-12-07",
+            "fecha_fin": "2026-12-31",
+            "docente_id": teacher.json()["id"],
+        },
+        headers=origin_headers,
+    )
+    assert second_course.status_code == 201, second_course.text
+    assert (
+        await client.put(
+            f"/api/v1/admin/courses/{second_course.json()['id']}/schedules",
+            json={
+                "horarios": [
+                    {
+                        "dia_semana": "LUNES",
+                        "hora_inicio": "08:00",
+                        "hora_fin": "10:00",
+                        "aula": "OTHER",
+                    }
+                ]
+            },
+            headers=origin_headers,
+        )
+    ).status_code == 200
+
+    url = "/api/v1/admin/planning/availability"
+    same_day = await client.get(url, params={"date": "2026-12-07"})
+    assert same_day.status_code == 200, same_day.text
+    assert {item["curso_id"] for item in same_day.json()} == {
+        context["course"]["id"],
+        second_course.json()["id"],
+    }
+    exception = await client.post(
+        f"/api/v1/admin/courses/{context['course']['id']}/exceptions",
+        json={
+            "fecha_original": "2026-12-07",
+            "tipo": "REPROGRAMADA",
+            "fecha_reprogramada": "2026-12-08",
+            "hora_inicio": "08:00",
+            "hora_fin": "10:00",
+            "aula": "BASE",
+        },
+        headers=origin_headers,
+    )
+    assert exception.status_code == 201, exception.text
+    assert [
+        item["curso_id"] for item in (await client.get(url, params={"date": "2026-12-07"})).json()
+    ] == [second_course.json()["id"]]
+    assert [
+        item["curso_id"] for item in (await client.get(url, params={"date": "2026-12-08"})).json()
+    ] == [context["course"]["id"]]
+
+    holiday = await client.post(
+        f"/api/v1/admin/periods/{second_id}/holidays",
+        json={"fecha": "2026-12-14", "descripcion": "Feriado del otro periodo"},
+        headers=origin_headers,
+    )
+    assert holiday.status_code == 201, holiday.text
+    after_holiday = await client.get(url, params={"date": "2026-12-14"})
+    assert after_holiday.status_code == 200, after_holiday.text
+    assert [item["curso_id"] for item in after_holiday.json()] == [context["course"]["id"]]
+
+    range_url = "/api/v1/admin/planning/availability-range"
+    bookings = await client.get(range_url, params={"start": "2026-12-07", "end": "2026-12-14"})
+    assert bookings.status_code == 200, bookings.text
+    actual = bookings.json()
+    assert {item["curso_id"] for item in actual} == {
+        context["course"]["id"],
+        second_course.json()["id"],
+    }
+    assert any(item["fecha"] == "2026-12-08" and item["reprogramada"] for item in actual)
+    assert all(
+        not (item["curso_id"] == second_course.json()["id"] and item["fecha"] == "2026-12-14")
+        for item in actual
+    )
+    assert all(
+        item["materia_codigo"] and item["paralelo"] and item["carrera_nombre"] for item in actual
+    )
+    second_booking = next(item for item in actual if item["curso_id"] == second_course.json()["id"])
+    assert second_booking["docente_nombre"] == "Otro Docente"
+    invalid_range = await client.get(range_url, params={"start": "2026-12-14", "end": "2026-12-07"})
+    assert invalid_range.status_code == 422
+
+    client.cookies.clear()
+    assert (await client.get(url, params={"date": "2026-12-07"})).status_code == 401
+    anonymous_range = await client.get(
+        range_url, params={"start": "2026-12-07", "end": "2026-12-14"}
+    )
+    assert anonymous_range.status_code == 401
 
 
 async def assert_report_download(client, code, output_format, **filters):
@@ -189,7 +509,9 @@ async def test_period_dates_and_course_must_fit_period(client, origin_headers):
 async def test_planning_room_catalog_and_real_date_conflicts(client, origin_headers):
     await admin_login(client)
     room = await client.post(
-        "/api/v1/admin/planning/rooms", json={"codigo": "101"}, headers=origin_headers
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "101", "capacidad": 40},
+        headers=origin_headers,
     )
     assert room.status_code == 201, room.text
     block = await client.post(
@@ -315,16 +637,31 @@ async def test_planning_resource_catalog_validation_and_role_access(client, orig
     assert unauthenticated.status_code == 401
     await admin_login(client)
 
+    missing_capacity = await client.post(
+        "/api/v1/admin/planning/rooms", json={"codigo": "SIN-CUPO"}, headers=origin_headers
+    )
+    assert missing_capacity.status_code == 422
+    zero_capacity = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "SIN-CUPO", "capacidad": 0},
+        headers=origin_headers,
+    )
+    assert zero_capacity.status_code == 422
+
     room = await client.post(
-        "/api/v1/admin/planning/rooms", json={"codigo": "a-101"}, headers=origin_headers
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "a-101", "capacidad": 40},
+        headers=origin_headers,
     )
     assert room.status_code == 201, room.text
-    assert room.json() == {"codigo": "A-101", "activa": True}
+    assert room.json() == {"codigo": "A-101", "capacidad": 40, "activa": True}
     listed_rooms = await client.get("/api/v1/admin/planning/rooms", headers=origin_headers)
     assert listed_rooms.status_code == 200
     assert any(item["codigo"] == "A-101" for item in listed_rooms.json())
     duplicate_room = await client.post(
-        "/api/v1/admin/planning/rooms", json={"codigo": "A-101"}, headers=origin_headers
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "A-101", "capacidad": 40},
+        headers=origin_headers,
     )
     assert duplicate_room.status_code == 409
     inactive_room = await client.patch(
@@ -440,7 +777,9 @@ async def test_planning_resource_catalog_validation_and_role_access(client, orig
 async def test_configured_room_and_block_complete_course_schedule_flow(client, origin_headers):
     await admin_login(client)
     room = await client.post(
-        "/api/v1/admin/planning/rooms", json={"codigo": "204"}, headers=origin_headers
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "204", "capacidad": 40},
+        headers=origin_headers,
     )
     assert room.status_code == 201, room.text
     block = await client.post(
@@ -495,12 +834,130 @@ async def test_configured_room_and_block_complete_course_schedule_flow(client, o
     assert opened.json()["inscripcion_abierta"] is True
 
 
+async def test_room_capacity_limits_schedule_cupo_and_future_reprogramming(client):
+    await admin_login(client)
+    today = datetime.now(ZoneInfo("America/La_Paz")).date()
+    next_monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    period_end = next_monday + timedelta(days=30)
+    context = await create_course_context(
+        client,
+        schedule=False,
+        period_start=next_monday.isoformat(),
+        period_end=period_end.isoformat(),
+        course_start=next_monday.isoformat(),
+        course_end=period_end.isoformat(),
+    )
+    course_id = context["course"]["id"]
+    for code, seats in (("LAB15", 15), ("AULA25", 25)):
+        room = await client.post(
+            "/api/v1/admin/planning/rooms",
+            json={"codigo": code, "capacidad": seats},
+            headers=ORIGIN,
+        )
+        assert room.status_code == 201, room.text
+
+    def schedule(room):
+        return {
+            "horarios": [
+                {"dia_semana": "LUNES", "hora_inicio": "08:00", "hora_fin": "10:00", "aula": room}
+            ]
+        }
+
+    too_small_preview = await client.post(
+        f"/api/v1/admin/courses/{course_id}/schedules/validate",
+        json=schedule("LAB15"),
+        headers=ORIGIN,
+    )
+    assert too_small_preview.status_code == 409
+    assert "capacidad 15" in too_small_preview.json()["detail"]
+    too_small_save = await client.put(
+        f"/api/v1/admin/courses/{course_id}/schedules",
+        json=schedule("LAB15"),
+        headers=ORIGIN,
+    )
+    assert too_small_save.status_code == 409
+    assert (await client.get("/api/v1/courses")).json()[0]["horarios"] == []
+
+    assigned = await client.put(
+        f"/api/v1/admin/courses/{course_id}/schedules",
+        json=schedule("AULA25"),
+        headers=ORIGIN,
+    )
+    assert assigned.status_code == 200, assigned.text
+    smaller_second_day = await client.put(
+        f"/api/v1/admin/courses/{course_id}/schedules",
+        json={
+            "horarios": schedule("AULA25")["horarios"]
+            + [
+                {
+                    "dia_semana": "MARTES",
+                    "hora_inicio": "08:00",
+                    "hora_fin": "10:00",
+                    "aula": "LAB15",
+                }
+            ]
+        },
+        headers=ORIGIN,
+    )
+    assert smaller_second_day.status_code == 409
+
+    opened = await client.patch(
+        f"/api/v1/admin/courses/{course_id}/registration",
+        json={"inscripcion_abierta": True},
+        headers=ORIGIN,
+    )
+    assert opened.status_code == 200, opened.text
+    cupo_preview = await client.post(
+        f"/api/v1/admin/courses/{course_id}/preview", json={"cupo": 26}, headers=ORIGIN
+    )
+    assert cupo_preview.status_code == 409
+    cupo_save = await client.patch(
+        f"/api/v1/admin/courses/{course_id}", json={"cupo": 26}, headers=ORIGIN
+    )
+    assert cupo_save.status_code == 409
+
+    substitute = {
+        "fecha_original": next_monday.isoformat(),
+        "tipo": "REPROGRAMADA",
+        "fecha_reprogramada": (next_monday + timedelta(days=1)).isoformat(),
+        "hora_inicio": "08:00",
+        "hora_fin": "10:00",
+        "aula": "LAB15",
+    }
+    too_small_exception = await client.post(
+        f"/api/v1/admin/courses/{course_id}/exceptions", json=substitute, headers=ORIGIN
+    )
+    assert too_small_exception.status_code == 409
+    valid_exception = await client.post(
+        f"/api/v1/admin/courses/{course_id}/exceptions",
+        json={**substitute, "aula": "AULA25"},
+        headers=ORIGIN,
+    )
+    assert valid_exception.status_code == 201, valid_exception.text
+    rejected_reduction = await client.patch(
+        "/api/v1/admin/planning/rooms/AULA25", json={"capacidad": 19}, headers=ORIGIN
+    )
+    assert rejected_reduction.status_code == 409
+    assert "clases futuras" in rejected_reduction.json()["detail"]
+    reduced_cupo = await client.patch(
+        f"/api/v1/admin/courses/{course_id}", json={"cupo": 15}, headers=ORIGIN
+    )
+    assert reduced_cupo.status_code == 200, reduced_cupo.text
+    allowed_reduction = await client.patch(
+        "/api/v1/admin/planning/rooms/AULA25", json={"capacidad": 15}, headers=ORIGIN
+    )
+    assert allowed_reduction.status_code == 200, allowed_reduction.text
+    assert allowed_reduction.json()["capacidad"] == 15
+
+
 async def test_schedule_preview_applies_holidays_cancellations_and_reschedules(
     client, origin_headers
 ):
     await admin_login(client)
     room = await client.post(
-        "/api/v1/admin/planning/rooms", json={"codigo": "101"}, headers=origin_headers
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "101", "capacidad": 40},
+        headers=origin_headers,
     )
     assert room.status_code == 201, room.text
     context = await create_course_context(client)
@@ -630,9 +1087,33 @@ async def test_course_registration_requires_setup_and_inactivation_closes_it(cli
     )
     assert open_without_schedule.status_code == 409
 
-    scheduled = await client.put(
+    room = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "REG", "capacidad": 30},
+        headers=ORIGIN,
+    )
+    assert room.status_code == 201
+    pending_room = await client.put(
         f"/api/v1/admin/courses/{course_id}/schedules",
         json={"horarios": [{"dia_semana": "LUNES", "hora_inicio": "08:00", "hora_fin": "10:00"}]},
+        headers=ORIGIN,
+    )
+    assert pending_room.status_code == 200
+    open_without_room = await client.patch(
+        f"/api/v1/admin/courses/{course_id}/registration",
+        json={"inscripcion_abierta": True},
+        headers=ORIGIN,
+    )
+    assert open_without_room.status_code == 409
+    assert "aula" in open_without_room.json()["detail"]
+
+    scheduled = await client.put(
+        f"/api/v1/admin/courses/{course_id}/schedules",
+        json={
+            "horarios": [
+                {"dia_semana": "LUNES", "hora_inicio": "08:00", "hora_fin": "10:00", "aula": "REG"}
+            ]
+        },
         headers=ORIGIN,
     )
     assert scheduled.status_code == 200
@@ -747,7 +1228,16 @@ async def test_schedule_update_rejects_new_overlap_for_an_enrolled_student(clien
     assert second_course.status_code == 201, second_course.text
     initial_schedule = await client.put(
         f"/api/v1/admin/courses/{second_course.json()['id']}/schedules",
-        json={"horarios": [{"dia_semana": "MARTES", "hora_inicio": "09:00", "hora_fin": "11:00"}]},
+        json={
+            "horarios": [
+                {
+                    "dia_semana": "MARTES",
+                    "hora_inicio": "09:00",
+                    "hora_fin": "11:00",
+                    "aula": "BASE",
+                }
+            ]
+        },
         headers=ORIGIN,
     )
     assert initial_schedule.status_code == 200, initial_schedule.text
@@ -829,9 +1319,24 @@ async def test_schedule_update_rejects_new_overlap_for_an_enrolled_student(clien
 
     client.cookies.clear()
     await admin_login(client)
+    other_room = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "OTRA", "capacidad": 40},
+        headers=ORIGIN,
+    )
+    assert other_room.status_code == 201, other_room.text
     overlap = await client.put(
         f"/api/v1/admin/courses/{second_course.json()['id']}/schedules",
-        json={"horarios": [{"dia_semana": "LUNES", "hora_inicio": "09:00", "hora_fin": "11:00"}]},
+        json={
+            "horarios": [
+                {
+                    "dia_semana": "LUNES",
+                    "hora_inicio": "09:00",
+                    "hora_fin": "11:00",
+                    "aula": "OTRA",
+                }
+            ]
+        },
         headers=ORIGIN,
     )
     assert overlap.status_code == 409
@@ -1094,7 +1599,16 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
     assert (await assert_report_preview(client, "RF40", **inactive_course))["row_count"] == 0
     changed_schedule = await client.put(
         f"/api/v1/admin/courses/{context['course']['id']}/schedules",
-        json={"horarios": [{"dia_semana": "MARTES", "hora_inicio": "09:00", "hora_fin": "11:00"}]},
+        json={
+            "horarios": [
+                {
+                    "dia_semana": "MARTES",
+                    "hora_inicio": "09:00",
+                    "hora_fin": "11:00",
+                    "aula": "BASE",
+                }
+            ]
+        },
         headers=ORIGIN,
     )
     assert changed_schedule.status_code == 200
@@ -1134,3 +1648,28 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
         f"/api/v1/notifications/{teacher_notices.json()[0]['id']}/read", headers=ORIGIN
     )
     assert not_owner.status_code == 404
+
+    valid_offer = await client.get("/api/v1/student/offer")
+    assert valid_offer.status_code == 200
+    assert valid_offer.json()[0]["aula_habilitada"] is True
+    client.cookies.clear()
+    await admin_login(client)
+    disabled_room = await client.patch(
+        "/api/v1/admin/planning/rooms/BASE", json={"activa": False}, headers=ORIGIN
+    )
+    assert disabled_room.status_code == 200
+    client.cookies.clear()
+    await client.post(
+        "/api/v1/auth/login",
+        json={"identificador": student_data["correo"], "contrasena": new_password},
+        headers=ORIGIN,
+    )
+    unavailable_offer = await client.get("/api/v1/student/offer")
+    assert unavailable_offer.status_code == 200
+    assert unavailable_offer.json()[0]["aula_habilitada"] is False
+    unsafe_enrollment = await client.post(
+        "/api/v1/student/enrollments",
+        json={"curso_id": context["course"]["id"]},
+        headers=ORIGIN,
+    )
+    assert unsafe_enrollment.status_code == 422

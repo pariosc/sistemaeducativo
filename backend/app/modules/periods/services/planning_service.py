@@ -2,7 +2,7 @@ from collections import defaultdict
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.modules.access.models.user import PerfilEstudiante, UserRole, Usuario
 from app.modules.curriculum.models.entities import (
     Carrera,
     EstadoPlan,
+    Facultad,
     Materia,
     MateriaPlan,
     PlanEstudio,
@@ -18,18 +19,26 @@ from app.modules.curriculum.models.entities import (
 )
 from app.modules.enrollments.models.entities import Inscripcion
 from app.modules.grades.models.entities import Calificacion
-from app.modules.parallel.models.entities import Curso
+from app.modules.parallel.models.entities import Curso, PlantillaModular
 from app.modules.periods.models.entities import (
     AperturaPlan,
     PeriodoAcademico,
     PeriodoCarrera,
     PeriodoPlan,
+    SemestreGrupo,
 )
 from app.modules.periods.schemas.planning import (
     PeriodPlanningPublic,
+    PeriodSubjectOverviewPublic,
     PlanOpeningPublic,
     PlanProjectionSlot,
     SubjectSuggestionPublic,
+)
+from app.modules.periods.services.group_progression import (
+    fill_group_slots,
+    group_code,
+    group_period_number,
+    group_slots,
 )
 
 
@@ -48,7 +57,7 @@ def _plan(db: Session, plan_id: UUID) -> PlanEstudio:
 
 
 def period_planning(db: Session, period_id: UUID) -> PeriodPlanningPublic:
-    _period(db, period_id)
+    period = _period(db, period_id)
     return PeriodPlanningPublic(
         periodo_id=period_id,
         carrera_ids=db.scalars(
@@ -57,7 +66,58 @@ def period_planning(db: Session, period_id: UUID) -> PeriodPlanningPublic:
         plan_ids=db.scalars(
             select(PeriodoPlan.plan_id).where(PeriodoPlan.periodo_id == period_id)
         ).all(),
+        plantilla_modular_id=period.plantilla_modular_id,
     )
+
+
+def period_subject_overview(db: Session, period_id: UUID) -> list[PeriodSubjectOverviewPublic]:
+    _period(db, period_id)
+    plans = db.execute(
+        select(PlanEstudio, Carrera, Facultad)
+        .join(PeriodoPlan, PeriodoPlan.plan_id == PlanEstudio.id)
+        .join(Carrera, Carrera.id == PlanEstudio.carrera_id)
+        .join(Facultad, Facultad.id == Carrera.facultad_id)
+        .where(PeriodoPlan.periodo_id == period_id)
+        .order_by(Facultad.nombre, Carrera.nombre, PlanEstudio.codigo)
+    ).all()
+    return [
+        PeriodSubjectOverviewPublic(
+            **suggestion.model_dump(),
+            facultad_id=faculty.id,
+            facultad_nombre=faculty.nombre,
+            carrera_id=career.id,
+            carrera_nombre=career.nombre,
+            plan_id=plan.id,
+            plan_codigo=plan.codigo,
+            plan_modalidad=plan.modalidad.value,
+            plan_estado=plan.estado.value,
+        )
+        for plan, career, faculty in plans
+        for suggestion in subject_suggestions(db, period_id, plan.id)
+    ]
+
+
+def set_modular_template(db: Session, period_id: UUID, template_id: UUID) -> PeriodPlanningPublic:
+    period = db.scalar(
+        select(PeriodoAcademico).where(PeriodoAcademico.id == period_id).with_for_update()
+    )
+    if not period:
+        raise HTTPException(status_code=404, detail="Semestre académico no encontrado")
+    template = db.get(PlantillaModular, template_id)
+    if not template or not template.activa:
+        raise HTTPException(status_code=422, detail="Selecciona una plantilla modular activa")
+    if period.plantilla_modular_id != template_id and db.scalar(
+        select(Curso.id)
+        .where(Curso.periodo_id == period_id, Curso.plantilla_modular_id.is_not(None))
+        .limit(1)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="El semestre ya tiene módulos programados; conserva su plantilla",
+        )
+    period.plantilla_modular_id = template_id
+    db.commit()
+    return period_planning(db, period_id)
 
 
 def add_career(db: Session, period_id: UUID, career_id: UUID) -> PeriodPlanningPublic:
@@ -137,13 +197,23 @@ def create_opening(db: Session, period_id: UUID, plan_id: UUID) -> PlanOpeningPu
         raise HTTPException(status_code=409, detail="Incorpora el plan al semestre primero")
     if db.scalar(
         select(AperturaPlan.id).where(
-            AperturaPlan.plan_id == plan_id, AperturaPlan.periodo_inicio_id == period_id
+            AperturaPlan.carrera_id == plan.carrera_id,
+            AperturaPlan.periodo_inicio_id == period_id,
         )
     ):
-        raise HTTPException(status_code=409, detail="Este plan ya tiene un grupo que inicia aquí")
-    opening = AperturaPlan(plan_id=plan_id, periodo_inicio_id=period_id)
+        raise HTTPException(
+            status_code=409, detail="Esta carrera ya tiene un grupo que inicia aquí"
+        )
+    opening = AperturaPlan(
+        plan_id=plan_id,
+        carrera_id=plan.carrera_id,
+        periodo_inicio_id=period_id,
+        codigo=group_code(db, plan, period),
+    )
     db.add(opening)
     try:
+        db.flush()
+        fill_group_slots(db, opening)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -151,47 +221,57 @@ def create_opening(db: Session, period_id: UUID, plan_id: UUID) -> PlanOpeningPu
     db.refresh(opening)
     return PlanOpeningPublic(
         id=opening.id,
+        codigo=opening.codigo,
         plan_id=plan_id,
         periodo_inicio_id=period_id,
         periodo_denominacion=period.denominacion,
         estudiantes=0,
         semestre_proyectado=1,
-        proyeccion=_projection(db, plan_id, period_id),
+        proyeccion=_projection(db, opening),
     )
 
 
-def _period_ordinal(db: Session, start: PeriodoAcademico, target: PeriodoAcademico) -> int | None:
-    if start.fecha_inicio > target.fecha_inicio:
-        return None
-    return int(
-        db.scalar(
-            select(func.count(PeriodoAcademico.id)).where(
-                PeriodoAcademico.fecha_inicio >= start.fecha_inicio,
-                PeriodoAcademico.fecha_inicio <= target.fecha_inicio,
-            )
+def remove_opening(db: Session, period_id: UUID, opening_id: UUID) -> None:
+    _period(db, period_id)
+    opening = db.scalar(
+        select(AperturaPlan)
+        .where(AperturaPlan.id == opening_id, AperturaPlan.periodo_inicio_id == period_id)
+        .with_for_update()
+    )
+    if not opening:
+        raise HTTPException(
+            status_code=404, detail="Grupo de ingreso no encontrado en este semestre"
         )
-        or 0
+    has_students = db.scalar(
+        select(PerfilEstudiante.usuario_id)
+        .where(PerfilEstudiante.apertura_plan_id == opening_id)
+        .limit(1)
     )
+    has_courses = db.scalar(select(Curso.id).where(Curso.apertura_plan_id == opening_id).limit(1))
+    if has_students or has_courses:
+        raise HTTPException(
+            status_code=409,
+            detail="El grupo ya tiene estudiantes o paralelos; no se puede deshacer su inicio",
+        )
+    db.execute(delete(SemestreGrupo).where(SemestreGrupo.apertura_plan_id == opening_id))
+    db.delete(opening)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El grupo tiene datos asociados") from exc
 
 
-def _projection(db: Session, plan_id: UUID, start_period_id: UUID) -> list[PlanProjectionSlot]:
-    start = _period(db, start_period_id)
-    duration = int(
-        db.scalar(select(func.max(UnidadPlan.numero)).where(UnidadPlan.plan_id == plan_id)) or 0
-    )
-    periods = db.scalars(
-        select(PeriodoAcademico)
-        .where(PeriodoAcademico.fecha_inicio >= start.fecha_inicio)
-        .order_by(PeriodoAcademico.fecha_inicio, PeriodoAcademico.id)
-        .limit(duration)
-    ).all()
+def _projection(db: Session, opening: AperturaPlan) -> list[PlanProjectionSlot]:
     return [
         PlanProjectionSlot(
-            semestre_numero=index + 1,
-            periodo_id=periods[index].id if index < len(periods) else None,
-            periodo_denominacion=periods[index].denominacion if index < len(periods) else None,
+            semestre_numero=slot.numero,
+            periodo_id=slot.periodo_id,
+            periodo_denominacion=(
+                db.get(PeriodoAcademico, slot.periodo_id).denominacion if slot.periodo_id else None
+            ),
         )
-        for index in range(duration)
+        for slot in group_slots(db, opening)
     ]
 
 
@@ -220,12 +300,13 @@ def list_openings(
         result.append(
             PlanOpeningPublic(
                 id=opening.id,
+                codigo=opening.codigo,
                 plan_id=plan_id,
                 periodo_inicio_id=start.id,
                 periodo_denominacion=start.denominacion,
                 estudiantes=count,
-                semestre_proyectado=_period_ordinal(db, start, target) if target else None,
-                proyeccion=_projection(db, plan_id, start.id),
+                semestre_proyectado=group_period_number(db, opening, target.id) if target else None,
+                proyeccion=_projection(db, opening),
             )
         )
     return result

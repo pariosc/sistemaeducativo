@@ -31,11 +31,12 @@ export function StudentOfferPage() {
     <section className="content-wrap"><span className="eyebrow">MI FORMACIÓN</span><h1>Oferta e inscripciones</h1>
       <p className="section-intro">Consulta la oferta de tu plan y solicita inscripción en los paralelos disponibles.</p>
       {error && <p role="alert" className="form-alert">{error}</p>}{message && <p role="status" className="success-note">{message}</p>}
-      <div className="unit-list">{offer.length === 0 ? <section className="profile-card"><p>No hay oferta disponible para tu plan vigente.</p></section> : offer.map(({ curso, semestre_numero, semestre_nombre, cupos_disponibles, inscrito, prerrequisitos_pendientes }) => {
+      <div className="unit-list">{offer.length === 0 ? <section className="profile-card"><p>No hay oferta disponible para tu plan vigente.</p></section> : offer.map(({ curso, semestre_numero, semestre_nombre, cupos_disponibles, aula_habilitada, inscrito, prerrequisitos_pendientes }) => {
         const reasons: string[] = []
         if (!curso.activo) reasons.push("el paralelo está inactivo")
         if (!curso.inscripcion_abierta) reasons.push("la inscripción está cerrada")
         if (cupos_disponibles === 0) reasons.push("no hay cupos disponibles")
+        if (!aula_habilitada) reasons.push("falta configurar un aula con capacidad suficiente")
         if (prerrequisitos_pendientes.length > 0) reasons.push("faltan prerrequisitos")
         const label = `${curso.materia_codigo} — ${curso.materia_nombre}, paralelo ${curso.paralelo}`
         return <article className="profile-card unit-card" key={curso.id}>

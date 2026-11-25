@@ -102,6 +102,7 @@ class PlanEstudio(Base):
     __tablename__ = "planes_estudio"
     __table_args__ = (
         UniqueConstraint("codigo", name="uq_planes_estudio_codigo"),
+        UniqueConstraint("id", "carrera_id", name="uq_planes_estudio_id_carrera"),
         CheckConstraint("codigo = upper(codigo)", name="ck_planes_codigo_mayusculas"),
         CheckConstraint("modalidad IN ('MODULAR', 'SEMESTRAL')", name="ck_planes_modalidad_valida"),
         CheckConstraint(

@@ -420,9 +420,7 @@ def delete_career(db: Session, career_id: UUID) -> None:
         )
     periods_count = _count(
         db,
-        select(func.count(PeriodoCarrera.periodo_id)).where(
-            PeriodoCarrera.carrera_id == career_id
-        ),
+        select(func.count(PeriodoCarrera.periodo_id)).where(PeriodoCarrera.carrera_id == career_id),
     )
     if periods_count:
         raise HTTPException(
@@ -668,7 +666,10 @@ def _plan_diagnostics(
         if empty:
             add(
                 "semestre_vacio",
-                f"Semestres sin materias: {', '.join(empty)}. Agrega materias o elimina el semestre.",
+                (
+                    f"Semestres sin materias: {', '.join(empty)}. "
+                    "Agrega materias o elimina el semestre."
+                ),
             )
 
     if not entry_by_id:
@@ -717,9 +718,7 @@ def _plan_diagnostics(
                 )
 
     for cycle in _prerequisite_cycles(prerequisites):
-        codes = [
-            entry_by_id[item].materia.codigo for item in cycle if item in entry_by_id
-        ]
+        codes = [entry_by_id[item].materia.codigo for item in cycle if item in entry_by_id]
         if codes:
             add(
                 "prerrequisito_ciclo",
@@ -847,10 +846,7 @@ def create_plan(db: Session, payload: PlanCreate) -> PlanPublic:
     if not career.facultad.activo:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"La facultad {career.facultad.codigo} está inactiva: "
-                "no admite planes nuevos"
-            ),
+            detail=(f"La facultad {career.facultad.codigo} está inactiva: no admite planes nuevos"),
         )
     plan = PlanEstudio(
         carrera_id=payload.carrera_id,
@@ -1018,9 +1014,7 @@ def create_unit(db: Session, plan_id: UUID, payload: UnitCreate) -> UnitPublic:
     return UnitPublic.model_validate(unit)
 
 
-def generate_units(
-    db: Session, plan_id: UUID, payload: PlanUnitsGenerate
-) -> PlanPublic:
+def generate_units(db: Session, plan_id: UUID, payload: PlanUnitsGenerate) -> PlanPublic:
     plan = _plan_or_404(db, plan_id)
     _require_draft(plan)
     current_max = max((unit.numero for unit in plan.unidades), default=0)
@@ -1106,9 +1100,7 @@ def add_subject_to_plan(db: Session, plan_id: UUID, payload: PlanSubjectCreate) 
     return _plan_output(db, plan)
 
 
-def add_subjects_to_plan(
-    db: Session, plan_id: UUID, payload: PlanSubjectsBulkCreate
-) -> PlanPublic:
+def add_subjects_to_plan(db: Session, plan_id: UUID, payload: PlanSubjectsBulkCreate) -> PlanPublic:
     plan = _plan_or_404(db, plan_id)
     _require_draft(plan)
     unit = db.scalar(
@@ -1333,9 +1325,7 @@ def list_student_plans(db: Session) -> list[StudentPlanPublic]:
     def output(profile: PerfilEstudiante, user: Usuario, plan: PlanEstudio | None):
         opening = openings.get(profile.apertura_plan_id) if profile.apertura_plan_id else None
         start = periods.get(opening.periodo_inicio_id) if opening else None
-        return _student_plan_output(
-            db, profile, user, plan, opening, start, preloaded=True
-        )
+        return _student_plan_output(db, profile, user, plan, opening, start, preloaded=True)
 
     return [output(profile, user, plan) for profile, user, plan in rows]
 

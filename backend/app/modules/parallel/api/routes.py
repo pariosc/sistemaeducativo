@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -5,7 +6,9 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import DbSession, require_roles, user_with_full_access
 from app.modules.access.models.user import UserRole, Usuario
+from app.modules.parallel.schemas.calendar import CalendarSessionPublic, PlanningBookingPublic
 from app.modules.parallel.schemas.courses import (
+    BatchRegistrationUpdate,
     CourseCreate,
     CoursePublic,
     CourseScheduleUpdate,
@@ -16,7 +19,16 @@ from app.modules.parallel.schemas.courses import (
     ScheduleExceptionCreate,
     ScheduleExceptionPublic,
 )
+from app.modules.parallel.schemas.modular import (
+    ModularBatchInput,
+    ModularBatchPreview,
+    ModularPlanInput,
+    ModularPlanPreview,
+)
 from app.modules.parallel.schemas.planning import (
+    ModularTemplateCreate,
+    ModularTemplatePublic,
+    ModularTemplateUpdate,
     RoomCreate,
     RoomPublic,
     RoomUpdate,
@@ -24,12 +36,36 @@ from app.modules.parallel.schemas.planning import (
     ScheduleBlockPublic,
     ScheduleBlockUpdate,
 )
+from app.modules.parallel.services import calendar_service, modular_service, planning_config
 from app.modules.parallel.services import parallel_service as service
-from app.modules.parallel.services import planning_config
 
 router = APIRouter(tags=["paralelos y calendario"])
 AdminUser = Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))]
 AuthenticatedUser = Annotated[Usuario, Depends(user_with_full_access)]
+
+
+@router.get(
+    "/api/v1/admin/periods/{period_id}/calendar",
+    response_model=list[CalendarSessionPublic],
+)
+async def get_period_calendar(period_id: UUID, week_start: date, _: AdminUser, db: DbSession):
+    return calendar_service.period_week(db, period_id, week_start)
+
+
+@router.get(
+    "/api/v1/admin/planning/availability",
+    response_model=list[CalendarSessionPublic],
+)
+async def get_planning_availability(date: date, _: AdminUser, db: DbSession):
+    return calendar_service.availability_day(db, date)
+
+
+@router.get(
+    "/api/v1/admin/planning/availability-range",
+    response_model=list[PlanningBookingPublic],
+)
+async def get_planning_availability_range(start: date, end: date, _: AdminUser, db: DbSession):
+    return calendar_service.availability_range(db, start, end)
 
 
 @router.get("/api/v1/admin/planning/rooms", response_model=list[RoomPublic])
@@ -70,6 +106,72 @@ async def patch_schedule_block(
     block_id: UUID, payload: ScheduleBlockUpdate, _: AdminUser, db: DbSession
 ):
     return planning_config.update_schedule_block(db, block_id, payload)
+
+
+@router.get("/api/v1/admin/planning/modular-templates", response_model=list[ModularTemplatePublic])
+async def get_modular_templates(_: AdminUser, db: DbSession):
+    return planning_config.list_modular_templates(db)
+
+
+@router.post(
+    "/api/v1/admin/planning/modular-templates",
+    response_model=ModularTemplatePublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_modular_template(payload: ModularTemplateCreate, _: AdminUser, db: DbSession):
+    return planning_config.create_modular_template(db, payload)
+
+
+@router.patch(
+    "/api/v1/admin/planning/modular-templates/{template_id}",
+    response_model=ModularTemplatePublic,
+)
+async def patch_modular_template(
+    template_id: UUID, payload: ModularTemplateUpdate, _: AdminUser, db: DbSession
+):
+    return planning_config.update_modular_template(db, template_id, payload)
+
+
+@router.post(
+    "/api/v1/admin/periods/{period_id}/modular/preview",
+    response_model=ModularPlanPreview,
+)
+async def preview_modular_sequence(
+    period_id: UUID, payload: ModularPlanInput, _: AdminUser, db: DbSession
+):
+    return modular_service.preview_modular_plan(db, period_id, payload)
+
+
+@router.post(
+    "/api/v1/admin/periods/{period_id}/modular/courses",
+    response_model=list[CoursePublic],
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_modular_sequence(
+    period_id: UUID, payload: ModularPlanInput, _: AdminUser, db: DbSession
+):
+    return modular_service.create_modular_plan(db, period_id, payload)
+
+
+@router.post(
+    "/api/v1/admin/periods/{period_id}/modular/batch/preview",
+    response_model=ModularBatchPreview,
+)
+async def preview_modular_batch(
+    period_id: UUID, payload: ModularBatchInput, _: AdminUser, db: DbSession
+):
+    return modular_service.preview_modular_batch(db, period_id, payload)
+
+
+@router.post(
+    "/api/v1/admin/periods/{period_id}/modular/batch/courses",
+    response_model=list[CoursePublic],
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_modular_batch(
+    period_id: UUID, payload: ModularBatchInput, _: AdminUser, db: DbSession
+):
+    return modular_service.create_modular_batch(db, period_id, payload)
 
 
 @router.get("/api/v1/courses", response_model=list[CoursePublic])
@@ -115,6 +217,18 @@ async def patch_registration(
     course_id: UUID, payload: RegistrationUpdate, _: AdminUser, db: DbSession
 ):
     return service.set_registration_open(db, course_id, payload.inscripcion_abierta)
+
+
+@router.patch(
+    "/api/v1/admin/periods/{period_id}/courses/registration",
+    response_model=list[CoursePublic],
+)
+async def patch_period_registration(
+    period_id: UUID, payload: BatchRegistrationUpdate, _: AdminUser, db: DbSession
+):
+    return service.set_registration_open_many(
+        db, period_id, set(payload.curso_ids), payload.inscripcion_abierta
+    )
 
 
 @router.delete("/api/v1/admin/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT)

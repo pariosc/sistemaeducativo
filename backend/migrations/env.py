@@ -20,12 +20,14 @@ from app.modules.parallel.models import (  # noqa: F401
     ExcepcionHorario,
     FeriadoPeriodo,
     HorarioClase,
+    PlantillaModular,
 )
 from app.modules.periods.models import (  # noqa: F401
     AperturaPlan,
     PeriodoAcademico,
     PeriodoCarrera,
     PeriodoPlan,
+    SemestreGrupo,
 )
 
 config = context.config

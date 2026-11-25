@@ -575,8 +575,8 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   `POST /plans/{id}/units/generate`, `POST /plans/{id}/units/renumber` y
   `POST /plans/{id}/subjects/bulk`. La migración
   `0011_curriculum_integrity` agrega un índice sobre `materias_plan.materia_id`;
-  **no se aplicó a la base principal** y requiere autorización explícita antes
-  de ejecutar `alembic upgrade head`.
+  se aplicó posteriormente a la base PostgreSQL local al incorporar la
+  actualización del equipo con autorización del usuario.
 - Verificación ejecutada: 34 pruebas backend aprobaron en SQLite, entre ellas
   publicación con estructura incompleta, renumeración, duplicación, carga
   masiva, inactivación de materia en plan vigente y rechazo de asignación a
@@ -586,3 +586,367 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
 - **Secciones del informe a revisar:** RN04–RN08, RF11–RF18, HU08–HU13,
   P04–P06, T11–T18, modelo físico (índice de materias del plan) y capturas de
   facultades, carreras, materias y planes.
+
+## Planificación modular secuencial — 24-11-2026
+
+- Se incorporó la actualización de currículo del equipo (`5dd16bc`) y se
+  conservaron los cambios locales de documentación. Las dependencias estaban
+  al día; se aplicaron `0011_curriculum_integrity` y luego
+  `0012_modular_planning` a PostgreSQL local con respaldos previos.
+- La migración `0012` agrega `plantillas_modulares`, la referencia de plantilla
+  en `periodos_academicos`, una franja modular predeterminada por turno y los
+  campos de grupo de ingreso, turno, plantilla y objetivo de clases en `cursos`.
+  Los paralelos anteriores conservan sus campos nuevos en NULL; no se alteran
+  fechas ni horarios históricos.
+- «Aulas y turnos» permite crear plantillas nombradas con clases por módulo y
+  duración. El semestre selecciona una; la plantilla asignada se protege de
+  cambios estructurales. En «Oferta y paralelos» el administrador elige un plan
+  MODULAR, grupo de ingreso, turno y materias en secuencia, asignando docente,
+  aula, cupo y código de paralelo. La vista previa calcula fechas efectivas de
+  lunes a viernes, omite feriados del periodo y muestra si toda la secuencia
+  cabe dentro del semestre. El guardado de la secuencia es transaccional.
+- El backend impide solapar materias distintas del mismo grupo, turno e
+  identificador de paralelo (criterio precisado el 25-11-2026), y
+  conserva las comprobaciones de cruces reales de docentes, aulas y estudiantes.
+  El grupo del paralelo orienta la planificación; no restringe la inscripción
+  de otros estudiantes elegibles. Para semestres con plantilla, los paralelos
+  modulares se crean desde esta secuencia; semestres anteriores sin plantilla
+  conservan el flujo previo. Cada paralelo muestra clases efectivas frente al
+  objetivo, de modo que un feriado añadido después queda visible como déficit.
+- Verificación real: 35 pruebas backend en SQLite y la prueba modular en una
+  base PostgreSQL aislada aprobadas; Ruff, formato, compilación TypeScript/Vite
+  y `alembic check` en PostgreSQL local aprobaron. La migración `0012` quedó
+  aplicada. Persisten avisos de Zod y tamaño del paquete en Vite; falta una
+  revisión visual autenticada y prueba de concurrencia de dos programaciones
+  simultáneas para el mismo grupo/turno/paralelo.
+- **Informe:** actualizar RN09–RN11, RF19–RF23, HU14–HU16, P07/P08, modelo
+  físico, migración `0012`, diagrama de secuencia de planificación, casos T19–T21
+  y capturas de plantillas, configuración del semestre y vista previa modular.
+
+## Capacidad de aulas y cupo académico — 24-11-2026
+
+- Se aplicó `0013_room_capacity` a PostgreSQL local con respaldo previo. El
+  campo `aulas.capacidad` es positivo; queda NULL para aulas antiguas porque el
+  sistema desconoce sus asientos reales. Las aulas nuevas requieren capacidad.
+- «Aulas y turnos» permite consultar y editar los asientos. La programación
+  modular y los horarios semestrales comparan el cupo del paralelo con todas
+  las aulas asignadas; la vista previa avisa antes de guardar. Una
+  reprogramación también comprueba la capacidad del aula sustituta. La
+  reducción de capacidad se rechaza si un paralelo activo con cupo mayor aún
+  tiene clases reales allí, considerando feriados y excepciones.
+- Abrir inscripciones exige un aula en cada horario y cupo compatible. El
+  servidor vuelve a comprobarlo al inscribir y la oferta estudiantil desactiva
+  la acción si el aula no está lista. Esto protege también los paralelos
+  abiertos antes de la migración. No se cambiaron de forma automática sus
+  estados ni sus cupos.
+- Verificación: 36 pruebas backend en SQLite; pruebas de paralelos y secuencia
+  modular en PostgreSQL aislado; Ruff, compilación TypeScript/Vite y
+  `alembic check` aprobados. En la base local, las cuatro aulas existentes
+  permanecen sin capacidad y cuatro paralelos abiertos dependen de ellas.
+  Antes de nuevas inscripciones, registrar la capacidad real de cada aula.
+  Falta revisión visual con sesión autenticada.
+- **Informe:** actualizar RN09–RN11, RF20–RF23, HU15–HU16, P08, modelo físico,
+  migración `0013`, casos T20–T25 y capturas del catálogo, aviso de capacidad
+  y oferta estudiantil.
+
+## Vista conjunta de oferta y calendario fechado — 24-11-2026
+
+- «Oferta y paralelos» presenta las materias de todos los planes incorporados
+  al semestre en una tabla filtrable por facultad, carrera, plan y semestre
+  curricular. Incluye aptos, repetidores, bloqueados y número de paralelos.
+  Los encabezados ordenan la tabla y se pagina en grupos de 25 filas.
+- Desde la fila se abre el diálogo de creación de un paralelo SEMESTRAL o el
+  editor de secuencia MODULAR del plan, en la misma página. Los paralelos
+  existentes se consultan en una tabla compacta con una acción de gestión.
+- El calendario administrativo muestra una semana con fechas reales de clase.
+  El servidor omite sesiones canceladas y feriados, y ubica las reprogramadas
+  en su nueva fecha. Se conservan los filtros por facultad, carrera, plan,
+  docente y aula y el detalle lateral del paralelo.
+- Se agregaron `GET /api/v1/admin/periods/{id}/planning/overview` y
+  `GET /api/v1/admin/periods/{id}/calendar?week_start=AAAA-MM-DD`, ambos
+  limitados a Administrador. No se modificó el esquema ni se añadieron
+  permisos académicos.
+- Verificación: 37 pruebas backend aprobadas en SQLite; la prueba de resumen,
+  fechas, reprogramación, feriado y acceso sin sesión aprobó también en una
+  base PostgreSQL aislada. Ruff y compilación TypeScript/Vite aprobados. Falta
+  revisión visual con sesión administrativa.
+- **Informe:** actualizar P08, RF19–RF23, HU14–HU16, el flujo de preparación
+  de la oferta y las capturas de la tabla conjunta y calendario.
+
+## Consulta de disponibilidad de docentes y aulas — 24-11-2026
+
+- El calendario de «Oferta y paralelos» abre un panel lateral para consultar
+  una fecha y franja. Muestra docentes y aulas libres u ocupados, las clases
+  que los ocupan, la capacidad física y la compatibilidad con el cupo del
+  paralelo. Acepta una franja de turno o horas manuales, búsqueda y filtro de
+  recursos disponibles.
+- La nueva ruta administrativa
+  `GET /api/v1/admin/planning/availability?date=AAAA-MM-DD` devuelve clases
+  efectivas de **todos** los periodos que coinciden en la fecha, incluidas
+  otras carreras. Respeta feriados, cancelaciones y reprogramaciones. El panel
+  no usa solo la coincidencia del día semanal.
+- Con un paralelo seleccionado, el administrador puede asignar un docente,
+  cambiar el aula de una franja semanal existente o preparar una nueva franja
+  con aula. La consulta describe una fecha; al guardar, el servidor valida la
+  serie completa de clases y puede rechazar la asignación si hay un cruce en
+  otro día. Se conserva el control de capacidad y cupo.
+- La prueba nueva cubre periodos superpuestos, reprogramación, feriado y acceso
+  sin sesión. Verificación: 38 pruebas backend en SQLite; dos pruebas del flujo
+  en PostgreSQL aislado; dos pruebas unitarias Bun de franjas adyacentes y
+  superpuestas; Ruff y build TypeScript/Vite aprobados. No hubo migración.
+- **Informe:** actualizar P08 y el flujo de planificación, agregar captura
+  del panel de disponibilidad y distinguir consulta puntual de validación de
+  toda la serie. La revisión visual autenticada sigue pendiente.
+
+## Programación modular conjunta de varias carreras — 24-11-2026
+
+- «Oferta y paralelos» incorpora el modo «Varias carreras» junto al modo
+  individual. El administrador marca los planes modulares participantes y,
+  dentro de cada uno, el grupo de ingreso, turno, fecha inicial, materias y
+  orden, paralelo, clases, cupo, docente y aula. Una búsqueda ayuda a localizar
+  facultad, carrera o plan; «Seleccionar sugeridas» usa la propuesta académica
+  sin guardar automáticamente ninguna materia.
+- La vista previa reúne las fechas de todos los planes seleccionados y valida
+  cruces entre docentes y aulas, incluso entre carreras. Si una secuencia no
+  cabe en el semestre, indica el problema y no habilita el guardado.
+- Se agregaron las rutas administrativas
+  `POST /api/v1/admin/periods/{id}/modular/batch/preview` y
+  `POST /api/v1/admin/periods/{id}/modular/batch/courses`. El guardado usa una
+  transacción: ante un cruce o un plan fuera de fechas no crea parcialmente los
+  paralelos. Reutiliza grupo/turno, plantilla, feriados, capacidad y permisos
+  existentes; no hubo migración.
+- Verificación: 39 pruebas backend en SQLite; prueba específica del lote en
+  PostgreSQL aislado; dos pruebas unitarias Bun; Ruff y build TypeScript/Vite
+  aprobados. La prueba del lote cubre conflicto por docente, conflicto por
+  aula, fin fuera del semestre, ausencia de persistencia parcial, guardado
+  correcto y acceso sin sesión.
+- **Informe:** actualizar P08, RF19–RF23 y HU14–HU16 con el nuevo flujo y
+  capturas del editor conjunto. Falta revisión visual autenticada y probar
+  manualmente la interacción completa del formulario.
+
+## Organización de la página de semestre — 25-11-2026
+
+- La lista de semestres conserva sus tarjetas y agrega un filtro por estado:
+  todos, en curso, próximos y finalizados. Es un filtro local, sin cambios en
+  los datos.
+- El detalle muestra primero la incorporación guiada de facultad, carrera y
+  plan vigente. La plantilla modular pasa a un desplegable con la plantilla
+  asignada visible en el resumen y controles explícitos al abrirlo.
+- Los accesos a calendario, oferta y habilitaciones se condensan en una lista
+  de estado. El único botón para agregar feriados queda en el calendario. Los
+  enlaces para planificar materias se presentan como botones.
+- No se agregó eliminación de semestres: P07 no la contempla. Se requiere una
+  decisión funcional sobre historial y dependencias antes de diseñarla.
+- Verificación: compilación TypeScript/Vite, dos pruebas unitarias Bun y
+  revisión visual autenticada del detalle 2027-2. No se guardaron cambios
+  académicos durante la revisión de interfaz.
+
+## Tabla y corrección de grupos en el semestre — 25-11-2026
+
+- Se retiró la lista «Estado del semestre» porque duplicaba la navegación
+  superior. El calendario de feriados permanece al final del detalle.
+- Las carreras, planes y grupos se muestran en una tabla compacta, con filtros
+  por facultad, carrera y mes de inicio del grupo, y orden por carrera,
+  facultad, semestre previsto o fecha de inicio. Cada fila permite abrir la
+  secuencia y la asignación de estudiantes cuando corresponde.
+- Se muestran acciones para quitar una carrera sin planes y un plan sin
+  grupos. Se añadió «Deshacer inicio» de un grupo creado en el semestre solo
+  cuando no tiene estudiantes ni paralelos. La API valida estas condiciones
+  antes de eliminar el grupo y conserva los datos con dependencias.
+- Verificación: 40 pruebas backend aprobadas, dos pruebas unitarias frontend,
+  compilación TypeScript/Vite y revisión visual autenticada de la tabla. No se
+  modificaron datos académicos durante la revisión visual.
+
+## Enlace de plan a oferta — 25-11-2026
+
+- El botón «Planificar» de la tabla del semestre ahora abre «Oferta y
+  paralelos» con el plan correspondiente seleccionado. El filtro de la tabla de
+  materias y el filtro de paralelos toman `plan_id` de la URL; el administrador
+  puede cambiarlos después.
+- Verificación: compilación TypeScript/Vite y revisión autenticada del plan de
+  Psicología en 2027-2; la oferta mostró únicamente sus 12 materias.
+- Sigue pendiente rediseñar el paso de «Programar secuencia»: actualmente abre
+  el editor conjunto de planes aunque se pulse desde una materia individual.
+
+## Oferta por grupo y semestre — 25-11-2026
+
+- «Planificar» desde la fila de un grupo conserva también su identificador.
+  Oferta muestra las materias de su semestre proyectado; existe una opción para
+  consultar materias de semestres anteriores. Sin un grupo elegido, la vista
+  inicial muestra materias con grupos previstos y permite consultar el plan
+  completo por separado.
+- Los editores modulares muestran únicamente materias del semestre proyectado
+  o anteriores para el grupo elegido. La previsualización y guardado en backend
+  rechazan una materia de un semestre futuro para ese grupo.
+- La etiqueta «Prevista por grupo» distingue la propuesta curricular de la
+  demanda de estudiantes. En el editor conjunto, «Seleccionar previstas» marca
+  materias del semestre del grupo y anteriores con repetidores.
+- Verificación: compilación frontend, Ruff y prueba del planificador modular
+  con rechazo de materia futura. En la interfaz autenticada, el grupo de
+  Psicología de 2027-2 mostró seis materias de semestre 1 en Oferta y en el
+  editor modular.
+- Auditoría pendiente: el grupo no tiene nombre propio y la proyección actual
+  es dinámica; periodos superpuestos pueden alterar el semestre calculado.
+
+## Identidad y trayectoria de grupos — 25-11-2026
+
+- Se confirmó un grupo de ingreso por carrera y semestre académico, asociado
+  a una versión del plan. Puede organizarse en varios paralelos. El código
+  visible se genera a partir de carrera y periodo y se conserva después.
+- La migración `0014_group_trajectory` guarda los semestres curriculares del
+  grupo y su periodo asignado. La asignación omite periodos solapados; crear
+  nuevos periodos completa espacios vacíos sin reordenar los ya guardados.
+  También incorpora los grupos existentes sin borrar estudiantes o paralelos.
+- La tabla de planificación muestra el código y la trayectoria, y revisa los
+  datos antes de iniciar el grupo. La API y la base impiden duplicar un grupo
+  de la carrera en el mismo semestre aunque se use otro plan.
+- Verificación: 40 pruebas backend, incluidas unicidad y trayectoria tras crear
+  un periodo solapado; Ruff y compilación TypeScript/Vite aprobados. La
+  migración y `alembic check` aprobaron en una copia temporal PostgreSQL; en
+  la base local se preservaron dos grupos y se crearon cuatro espacios de
+  trayectoria. La revisión visual autenticada mostró el código, los espacios
+  de semestre y la confirmación previa a iniciar otro grupo, sin crear datos.
+
+## Horario del turno en secuencia modular — 25-11-2026
+
+- Se detectó que la plantilla modular de tres horas estaba asignada, pero no
+  existía ningún horario predeterminado de turno. La secuencia requería esa
+  configuración y la interfaz no explicaba claramente la dependencia.
+- Los editores individual y conjunto ahora definen «franja» como la hora de
+  inicio y fin de cada clase. Permiten escoger una franja compatible existente
+  o indicar la hora de inicio; el sistema propone la hora final según la
+  duración de la plantilla y guarda el turno sin abandonar el borrador.
+- Se aclaró el error del servidor y se corrigió el cambio de franja
+  predeterminada cuando otra ya tenía esa condición.
+- Verificación: 41 pruebas backend, promoción de una franja en PostgreSQL
+  aislado, Ruff, compilación TypeScript/Vite y revisión visual autenticada.
+  Al introducir 08:00, la pantalla propuso
+  11:00 para la plantilla de tres horas. No se guardó un horario en la base
+  local porque el administrador debe elegir la hora real del turno.
+
+## Acciones directas y secuencias con docente pendiente — 25-11-2026
+
+- La tabla del semestre muestra «Quitar carrera», «Quitar plan» y «Deshacer
+  grupo». Si existen grupos, estudiantes, paralelos u otra dependencia que
+  impida retirar un registro, la acción aparece deshabilitada con su motivo;
+  el servidor conserva la validación definitiva.
+- «Programar secuencia» se presenta como botón y abre el editor modular con la
+  materia elegida, el plan y el grupo correspondientes. Se pueden añadir las
+  demás materias previstas desde el mismo editor.
+- La secuencia modular admite docente pendiente. Aula y cupo permanecen
+  obligatorios para verificar capacidad y cruces; los paralelos creados sin
+  docente guardan la inscripción cerrada. El docente se asigna más tarde desde
+  el detalle del paralelo; abrir inscripciones exige que ya esté asignado.
+- «Oferta programada» muestra abrir/cerrar inscripción por paralelo y para una
+  selección de filas. El cambio masivo valida todos los paralelos y confirma
+  la operación en una transacción. «Ver» despliega el detalle en la tabla y
+  «Otro paralelo» prepara otro paralelo de la misma materia sin crear un
+  segundo grupo de ingreso.
+- Verificación: 42 pruebas backend y Ruff aprobados; TypeScript y Vite
+  compilaron. Dos casos críticos pasaron también en PostgreSQL temporal:
+  apertura/cierre masivo atómico y secuencia modular con docente pendiente y
+  otro paralelo de la misma materia. La interfaz autenticada mostró los
+  botones de retiro con sus estados, la materia preseleccionada en el editor,
+  el docente «Asignar después» y el detalle expandido en la tabla. No se
+  crearon ni modificaron datos académicos durante esa revisión visual.
+
+## Diagnóstico al guardar secuencias — 25-11-2026
+
+- Los editores modulares individual y conjunto muestran junto al botón las
+  condiciones faltantes o el error de la vista previa. Cuando la comprobación
+  sigue en curso, lo indican en ese mismo lugar. El botón inactivo usa estilo
+  gris y ahora dice «Guardar secuencia (N materias)».
+- Los mensajes de cruce del servidor indican materia, paralelo, fecha y hora;
+  para aulas sugieren elegir otra aula, turno o fecha. La comprobación sigue
+  ejecutándose en el servidor antes de guardar.
+- Se reprodujo en la interfaz el caso de Psicología 2027-2: seis materias B en
+  AULA D-01 se cruzan el 1 de junio con el paralelo A. El aviso aparece junto
+  al botón; con AULA D-02 para esas materias, la vista previa permite guardar.
+  No se confirmó el guardado ni se alteraron datos académicos en la revisión.
+- Ruff, la prueba del flujo modular y la compilación TypeScript/Vite aprobaron.
+  La agenda semanal de aulas solicitada se registró como propuesta en
+  `PENDIENTES_PARA_DECIDIR.md`.
+
+## Cruce entre materias de un grupo — 25-11-2026
+
+- La validación del mismo grupo y turno empezó a informar qué materias y
+  fechas se superponen. La revisión posterior detectó que comparaba también
+  paralelos diferentes A y B, lo cual era incorrecto para este proyecto. La
+  regla quedó corregida en la sección siguiente.
+- Se documentó un plan para mostrar docentes y aulas ocupados como opciones
+  deshabilitadas, con el motivo, y abrir una agenda semanal de aulas desde
+  cada materia. La disponibilidad deberá evaluarse para todas las clases del
+  módulo, no solo para una fecha visible. Esta interfaz aún no está creada.
+- La prueba modular del mensaje y Ruff aprobaron. No se modificaron datos
+  académicos durante la revisión.
+
+## Secuencias modulares independientes por paralelo — 25-11-2026
+
+- Se corrigió el alcance de la restricción secuencial: solo compara materias
+  distintas del mismo grupo de ingreso, turno e identificador de paralelo.
+  A y B pueden programar materias en diferente orden y con fechas
+  coincidentes. La disponibilidad de docente, aula y estudiantes inscritos
+  continúa verificándose globalmente por fechas y horas reales.
+- En el ejemplo de Psicología, invertir Estadística y Desarrollo en B ya no
+  provoca el error de grupo frente a A. Si ambos usan AULA D-01 en las mismas
+  horas, la vista previa informa el cruce de aula; AULA D-02 permite mantener
+  ambos paralelos a la vez cuando está libre.
+- El editor «Usar siguiente fecha» toma el último módulo del paralelo que se
+  está preparando, sin arrastrar la fecha final de A al preparar B.
+- La prueba modular crea A y B con orden inverso, docentes y aulas distintos;
+  pasó en SQLite y PostgreSQL temporal. Ruff y la compilación TypeScript/Vite
+  aprobaron. No se añadió migración ni se alteraron datos académicos locales.
+
+## Plan ajustado de disponibilidad y agenda — 25-11-2026
+
+- Se precisó en `PENDIENTES_PARA_DECIDIR.md` el flujo propuesto: seleccionar
+  primero grupo, paralelo, turno y fecha; calcular fechas de cada materia;
+  mostrar docentes y aulas disponibles o bloqueados para la serie completa de
+  clases; abrir una agenda semanal desde el aula de cada materia.
+- El plan distingue el choque de dos materias del mismo paralelo del choque
+  real de docente o aula entre paralelos A y B. Propone conservar visibles las
+  opciones ocupadas como deshabilitadas, con causa y primera fecha de cruce.
+  El modal mostrará una semana de siete días y un estado de disponibilidad
+  para todo el módulo. La consulta anticipada y la agenda aún no se han
+  implementado; la validación final del servidor sigue vigente.
+
+## Disponibilidad anticipada y agenda de aulas — 25-11-2026
+
+- Se agregó una consulta administrativa por rango que devuelve clases reales
+  de todos los periodos superpuestos, con materia, docente, paralelo y
+  vigencia. Aplica feriados, cancelaciones y reprogramaciones.
+- Los editores modulares calculan las fechas de cada materia antes de elegir
+  docente o aula. El identificador de paralelo se fija en la cabecera de cada
+  secuencia; A y B pueden seguir órdenes independientes. Las opciones ocupadas,
+  inactivas o sin capacidad se ven deshabilitadas con el motivo. El docente
+  sigue pudiendo quedar pendiente.
+- «Ver agenda» abre un modal con siete días y horario 06:00–22:00, muestra
+  ocupaciones y feriados, y permite seleccionar un aula solo cuando está
+  disponible para todas las clases del módulo. El servidor vuelve a validar
+  la secuencia al guardarla.
+- Se aprobaron la prueba de disponibilidad con periodos superpuestos,
+  reprogramación y feriado; las pruebas modulares del backend; cinco pruebas
+  del frontend y la compilación TypeScript/Vite. La revisión autenticada en
+  2027-2 mostró docente y AULA D-01 bloqueados para B, AULA D-02 libre, agenda
+  de siete días y vista previa habilitada con cupo 12. No se guardó un
+  paralelo durante esa revisión.
+
+## Conteo de paralelos y calendario por horas — 25-11-2026
+
+- Se distinguió el paralelo del curso de una materia: las doce materias
+  programadas de Psicología 2027-2 pertenecen a dos paralelos activos, A y B.
+  El resumen muestra ambos números y la tabla se presenta como materias
+  programadas en paralelos.
+- Se agregó filtro por identificador de paralelo A/B a «Oferta programada» y
+  «Calendario». Los filtros de estado de la tabla no ocultan clases del
+  calendario; este usa sus filtros académicos y de recursos.
+- El calendario semanal ahora es una grilla horaria de lunes a domingo,
+  07:00–22:00 como mínimo, ampliable ante clases fuera de ese horario. Los
+  bloques muestran materia, paralelo, carrera, aula y docente; los horarios
+  simultáneos se colocan en columnas sin ocultarse.
+- «Ver agenda de aulas» se movió de cada fila a la cabecera de asignaciones.
+  El administrador selecciona la materia allí y abre su agenda.
+- Seis pruebas frontend y compilación TypeScript/Vite aprobaron. En navegador
+  se comprobó el resumen 2 paralelos/12 materias, el filtro B con seis filas,
+  la grilla semanal y el botón de agenda en la cabecera. No se modificaron
+  datos académicos durante esa revisión.

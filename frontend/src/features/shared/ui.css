@@ -179,6 +179,24 @@
 .cx .ui-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 body:has(dialog.ui-modal[open]) { overflow: hidden; }
 
+/* ---------- Panel lateral (drawer) ---------- */
+.cx .ui-drawer { position: fixed; inset: 0 0 0 auto; width: min(460px, 100vw); max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; border-left: 1px solid var(--cx-line); background: var(--cx-surface); color: var(--cx-ink); box-shadow: -20px 0 60px rgb(15 23 42 / 22%); }
+.ui-drawer::backdrop { background: rgb(15 23 42 / 52%); }
+.cx .ui-drawer-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+.cx .ui-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 24px; border-bottom: 1px solid var(--cx-line); }
+.cx .ui-drawer-header h2 { font-size: 21px; }
+.cx .ui-drawer-description { margin: 6px 0 0; color: var(--cx-muted); font-size: 14px; line-height: 1.55; }
+.cx .ui-drawer-body { display: grid; align-content: start; gap: 18px; min-height: 0; overflow-y: auto; padding: 22px 24px; }
+.cx .ui-drawer-body form { display: grid; gap: 18px; }
+.cx .ui-drawer-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--cx-line); background: var(--cx-surface-muted); }
+.cx .ui-drawer-footer-inline { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+body:has(dialog.ui-drawer[open]) { overflow: hidden; }
+
+@media (max-width: 760px) {
+  .cx .ui-drawer { width: 100vw; border-left: 0; }
+  .cx .ui-drawer-header, .cx .ui-drawer-body, .cx .ui-drawer-footer { padding-right: 18px; padding-left: 18px; }
+}
+
 @media (max-width: 560px) {
   .cx .ui-modal-body { padding: 20px; }
   .cx .ui-modal-actions .ui-btn { flex: 1 1 auto; }

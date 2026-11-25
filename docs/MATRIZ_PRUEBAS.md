@@ -27,13 +27,13 @@ T01–T43.
 | T16 — Organizar materias | `test_plan_units_subjects_prerequisites_and_published_structure`; `test_plan_generation_duplication_and_bulk_subjects` | Altas, duplicados, unidad ajena, movimiento y bloqueo estructural. Agrega materias en lote, genera semestres consecutivos y rechaza códigos repetidos o inactivos en la carga masiva. |
 | T17 — Prerrequisitos | `test_plan_units_subjects_prerequisites_and_published_structure`; `test_plan_generation_duplication_and_bulk_subjects` | Agrega y retira vínculo; rechaza ciclo. La duplicación reproduce los prerrequisitos entre las materias copiadas. Falta referencia a otro plan. |
 | T18 — Asignar plan a estudiante | `test_student_plan_assignment_and_listing`; `test_plan_assignment_rejects_inactive_plan`; `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Asigna y consulta, incluido un plan BORRADOR; rechaza planes INACTIVOS y cambiarlo después de una inscripción activa. Vincula estudiantes a un grupo de ingreso de su plan. |
-| T19 — Registrar periodos | `test_period_dates_and_course_must_fit_period`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Rechaza fecha final anterior a inicio; incorpora carrera y plan por periodo y proyecta dos inicios del mismo plan. |
-| T20 — Crear paralelos | `test_period_dates_and_course_must_fit_period`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Parcial: fechas, docente, aula, feriados, cancelación y reprogramación; requiere plan incorporado al periodo. Prevalidación devuelve conflictos sin guardar. |
-| T21 — Modificar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_schedule_update_rejects_new_overlap_for_an_enrolled_student`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Parcial: estado/apertura, docente, aula, estudiante inscrito, reprogramación y rangos modulares disjuntos. La vista previa de fechas detecta choque docente y no persiste. Falta probar concurrencia de recursos en PostgreSQL. |
+| T19 — Registrar periodos | `test_period_dates_and_course_must_fit_period`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period`; `test_modular_sequence_uses_template_holidays_and_period_limit` | Rechaza fecha final anterior a inicio; incorpora carrera y plan por periodo, proyecta dos inicios y asigna plantilla modular al semestre. |
+| T20 — Crear paralelos | `test_period_dates_and_course_must_fit_period`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period`; `test_modular_sequence_uses_template_holidays_and_period_limit`; `test_room_capacity_limits_schedule_cupo_and_future_reprogramming` | Parcial: fechas, docente, aula, feriados, cancelación y reprogramación; requiere plan incorporado al periodo. La secuencia modular previsualiza 21 clases por materia, excluye feriado, rechaza exceso de semestre y permite A y B del mismo grupo/turno con órdenes inversos y recursos distintos. Impide solapar materias distintas dentro del mismo paralelo. También admite docente pendiente con inscripción cerrada. La vista previa rechaza cupo mayor que los asientos del aula. |
+| T21 — Modificar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it`; `test_parallel_teacher_schedule_conflict_is_rejected`; `test_planning_room_catalog_and_real_date_conflicts`; `test_schedule_preview_applies_holidays_cancellations_and_reschedules`; `test_schedule_update_rejects_new_overlap_for_an_enrolled_student`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period`; `test_modular_sequence_uses_template_holidays_and_period_limit`; `test_room_capacity_limits_schedule_cupo_and_future_reprogramming` | Parcial: estado/apertura, docente, aula, estudiante inscrito, reprogramación y rangos modulares disjuntos. Rechaza cupo mayor que cualquiera de las aulas semanales o sustitutas y reducción de asientos frente a clases futuras. Falta probar concurrencia de recursos en PostgreSQL. |
 | T22 — Eliminar paralelos | `test_course_registration_requires_setup_and_inactivation_closes_it` | Elimina paralelo sin inscripciones. Falta bloqueo de borrado con historial. |
-| T23 — Abrir/cerrar inscripción | `test_course_registration_requires_setup_and_inactivation_closes_it` | Rechaza abrir sin horario y permite abrir cuando la configuración es válida; falta probar todas las precondiciones. |
-| T24 — Consultar oferta | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Muestra semestre y prerrequisitos pendientes; una nota del mismo periodo sigue pendiente para otra materia, mientras en el siguiente periodo se reconoce. Faltan otros escenarios de oferta. |
-| T25 — Inscribirse | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Inscripción válida, rechazo de duplicado y de prerrequisito del mismo periodo, avance y repetición en uno posterior. Faltan cupo límite y concurrencia. |
+| T23 — Abrir/cerrar inscripción | `test_course_registration_requires_setup_and_inactivation_closes_it`; `test_room_capacity_limits_schedule_cupo_and_future_reprogramming`; `test_bulk_registration_is_atomic_and_scoped_to_period`; `test_modular_sequence_uses_template_holidays_and_period_limit` | Rechaza abrir sin horario, aula o docente y permite abrir con aula y cupo compatibles. El lote limita los paralelos al periodo y no aplica aperturas parciales ante un error. Faltan escenarios de concurrencia real. |
+| T24 — Consultar oferta | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Muestra semestre, prerrequisitos pendientes y disponibilidad del aula; una nota del mismo periodo sigue pendiente para otra materia, mientras en el siguiente periodo se reconoce. Faltan otros escenarios de oferta. |
+| T25 — Inscribirse | `test_offer_enrollment_dashboard_and_schedule_notifications`; `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period` | Inscripción válida, rechazo de duplicado, aula inactiva y prerrequisito del mismo periodo; avance y repetición en uno posterior. Faltan cupo límite y concurrencia. |
 | T26 — Consultar paralelos | `test_offer_enrollment_dashboard_and_schedule_notifications` | Admin, estudiante y docente consultan cursos según su relación. |
 | T27 — Registrar calificación | `test_offer_enrollment_dashboard_and_schedule_notifications` | Docente asignado registra 51; rechaza nota 101. |
 | T28 — Corregir calificación | `test_offer_enrollment_dashboard_and_schedule_notifications` | Rechaza duplicar el registro y permite corregir a 50. Falta probar docente ajeno. |
@@ -105,6 +105,66 @@ se repitieron las 28 pruebas SQLite y las 2 variantes MODULAR/SEMESTRAL de
 `test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period`
 en una nueva base PostgreSQL temporal. También aprobaron Ruff, el formato y
 la compilación TypeScript/Vite.
+
+## Ejecución del 24-11-2026 — capacidad de aulas
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 36 aprobadas | SQLite en memoria. Incluye cupo contra aulas semanales y sustitutas, apertura con aula, reducción de capacidad y oferta estudiantil. |
+| Pruebas de paralelos y secuencia modular | 11 aprobadas | PostgreSQL aislado; se creó la base de pruebas, se aplicó Alembic hasta `0013_room_capacity` y se eliminó la base después. |
+| `ruff check app migrations`; `ruff format --check app migrations` | Aprobados | Backend y migraciones. |
+| `bun run build` | Aprobado | TypeScript y Vite; persisten los avisos de Zod y tamaño del paquete. |
+| `alembic check`; `alembic current` | Aprobados | PostgreSQL local en `0013_room_capacity` sin diferencias ORM pendientes. |
+| Revisión visual autenticada y concurrencia de capacidad | Pendientes | Las comprobaciones de servidor y build aprobaron; falta recorrer el formulario con sesión y probar dos transacciones simultáneas. |
+
+## Ejecución del 24-11-2026 — vista conjunta y calendario fechado
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 37 aprobadas | SQLite en memoria; incluye resumen de materias, sesión semanal real, reprogramación, feriado y rutas sin autenticación. |
+| Prueba nueva de integración | Aprobada | PostgreSQL en base temporal aislada creada y eliminada para la ejecución. |
+| `ruff check app migrations`; `ruff format --check app migrations` | Aprobados | Backend completo y migraciones. |
+| `bun run build` | Aprobado | TypeScript y Vite; persisten avisos de Zod y tamaño del paquete. |
+| Revisión visual autenticada | Pendiente | Falta recorrer la tabla, calendario y detalle lateral en tamaños de escritorio y móvil. |
+
+## Ejecución del 24-11-2026 — disponibilidad de recursos
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 38 aprobadas | SQLite en memoria; se agregó disponibilidad entre periodos superpuestos, reprogramación, feriado y acceso sin sesión. |
+| Dos pruebas de calendario y disponibilidad | Aprobadas | PostgreSQL en base temporal aislada, eliminada al terminar. |
+| `bun run test` | 2 aprobadas | Franjas adyacentes sin cruce y franjas superpuestas con horarios serializados por la API. |
+| `ruff check app migrations`; `ruff format --check app migrations`; `bun run build` | Aprobados | Backend, TypeScript y Vite. Persisten avisos de Zod y tamaño del paquete. |
+| Asignación desde el panel y revisión visual autenticada | Pendientes | El backend valida escrituras; falta recorrer acciones y tamaños de pantalla con sesión administrativa. |
+
+## Ejecución del 24-11-2026 — programación modular conjunta
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 39 aprobadas | SQLite; nuevo caso de lote entre dos carreras, conflictos de docente y aula, fin fuera del semestre, atomicidad y permisos. |
+| `test_modular_batch.py` | Aprobada | PostgreSQL en base temporal aislada, eliminada después. |
+| `bun run test`; `bun run build` | 2 pruebas y compilación aprobadas | TypeScript/Vite; se mantienen los avisos de Zod y paquete grande. |
+| `ruff check app migrations`; `ruff format --check app migrations` | Aprobados | Backend completo. |
+| Revisión visual del lote y acciones del panel de disponibilidad | Pendiente | El intento de acceso con la credencial inicial configurada en el `.env` local devolvió 401; no se mostró ni registró la contraseña. Falta una sesión administrativa vigente para recorrer el flujo. |
+
+## Ejecución del 25-11-2026 — conteo y calendario por horas
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `bun test` | 6 aprobadas | Incluye regresión: doce materias A/B del mismo grupo cuentan como dos paralelos. |
+| `tsc -b`; compilación Vite | Aprobados | La grilla y ambos editores modulares compilaron; persisten avisos de Zod y tamaño de paquete. |
+| Revisión visual autenticada | Aprobada para 2027-2 | Resumen 2 paralelos/12 materias; filtro B con seis materias; grilla semanal y agenda en cabecera. No se guardaron cambios académicos. |
+
+
+## Ejecución del 25-11-2026 — agenda y bloqueo anticipado
+
+| Verificación | Resultado | Entorno / observación |
+| --- | --- | --- |
+| `pytest -q` | 42 aprobadas | SQLite en memoria; el caso de disponibilidad por rango verifica periodos superpuestos, feriado, reprogramación, datos de materia/docente y acceso sin sesión. |
+| `bun test` | 5 aprobadas | Fechas modulares, feriado, secuencias A/B, choques de aula/docente y capacidad. |
+| `ruff check` de archivos modificados; `tsc -b`; compilación Vite | Aprobados | Vite mantiene avisos existentes de Zod y tamaño del paquete. |
+| Revisión visual autenticada | Aprobada para el flujo A/B | En 2027-2, docente y AULA D-01 aparecen ocupados; la agenda muestra las clases de A, AULA D-02 queda libre y la vista previa de B pasa con cupo 12. No se guardó el borrador. |
+| Disponibilidad por rango en PostgreSQL y revisión de teclado/móvil | Pendientes | La prueba de la nueva consulta se ejecutó solo con SQLite; falta verificar carga y presentación en otros tamaños. |
 
 ## Pendientes de regresión
 

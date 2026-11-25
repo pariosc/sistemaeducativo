@@ -455,9 +455,7 @@ async def test_career_update_allows_keeping_inactive_faculty(client, origin_head
     assert moved.json()["facultad_id"] == target["id"]
 
 
-async def test_plan_publication_requires_structure_and_contiguous_semesters(
-    client, origin_headers
-):
+async def test_plan_publication_requires_structure_and_contiguous_semesters(client, origin_headers):
     await sign_in(client)
     career = await create_career(client)
     plan = await create_plan(client, career["id"], "PLAN-ESTRUCTURA")
@@ -511,16 +509,17 @@ async def test_plan_publication_requires_structure_and_contiguous_semesters(
     assert renumbered.status_code == 200
     assert [unit["numero"] for unit in renumbered.json()["unidades"]] == [1, 2]
     assert renumbered.json()["puede_publicarse"] is False
-    assert any(
-        item["codigo"] == "semestre_vacio" for item in renumbered.json()["diagnosticos"]
-    )
+    assert any(item["codigo"] == "semestre_vacio" for item in renumbered.json()["diagnosticos"])
     empty_semester = await client.patch(
         f"/api/v1/admin/plans/{plan['id']}",
         json={"estado": "VIGENTE"},
         headers=origin_headers,
     )
     assert empty_semester.status_code == 409
-    assert "vacío" in empty_semester.json()["detail"] or "sin materias" in empty_semester.json()["detail"]
+    assert (
+        "vacío" in empty_semester.json()["detail"]
+        or "sin materias" in empty_semester.json()["detail"]
+    )
 
     second_subject = (
         await client.post(
@@ -666,9 +665,7 @@ async def test_subject_inactivation_is_blocked_by_vigente_plan(client, origin_he
     assert blocked.status_code == 409
     assert "vigente" in blocked.json()["detail"]
     listed = (await client.get("/api/v1/admin/subjects")).json()
-    assert next(row for row in listed if row["id"] == subject["id"])[
-        "planes_vigentes_count"
-    ] == 1
+    assert next(row for row in listed if row["id"] == subject["id"])["planes_vigentes_count"] == 1
 
     assert (
         await client.patch(
@@ -718,4 +715,3 @@ async def test_plan_assignment_rejects_inactive_plan(client, origin_headers):
     )
     assert assigned.status_code == 409
     assert "inactivo" in assigned.json()["detail"]
-

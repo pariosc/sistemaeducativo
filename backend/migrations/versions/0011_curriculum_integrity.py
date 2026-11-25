@@ -9,9 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_materias_plan_materia_id", "materias_plan", ["materia_id"], unique=False
-    )
+    op.create_index("ix_materias_plan_materia_id", "materias_plan", ["materia_id"], unique=False)
 
 
 def downgrade() -> None:

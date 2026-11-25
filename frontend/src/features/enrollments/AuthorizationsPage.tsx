@@ -100,7 +100,14 @@ export function AuthorizationsPage() {
           {students.length === 0 ? (
             <EmptyState icon="users" title="No hay estudiantes registrados">Cuando existan estudiantes en el sistema aparecerán aquí para habilitarlos.</EmptyState>
           ) : (
-            <section className="ui-card pl-auth" aria-label="Estudiantes del semestre">
+            <>
+              <dl className="pl-tiles pl-tiles--4" aria-label="Resumen de habilitaciones">
+                <div><dt>Total</dt><dd>{counts.all}</dd></div>
+                <div><dt>Habilitados</dt><dd>{counts.enabled}</dd></div>
+                <div data-warn={counts.none > 0 ? "" : undefined}><dt>Sin habilitar</dt><dd>{counts.none}</dd></div>
+                <div><dt>Revocados</dt><dd>{counts.revoked}</dd></div>
+              </dl>
+              <section className="ui-card pl-auth" aria-label="Estudiantes del semestre">
               <div className="pl-auth-bar">
                 <div className="pl-segment" role="group" aria-label="Filtrar por estado">
                   {FILTERS.map((item) => (
@@ -150,7 +157,8 @@ export function AuthorizationsPage() {
                   </table>
                 </div>
               )}
-            </section>
+              </section>
+            </>
           )}
         </>
       )}

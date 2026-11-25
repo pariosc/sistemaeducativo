@@ -19,10 +19,15 @@ class PlanOpeningInput(StrictInputModel):
     plan_id: uuid.UUID
 
 
+class PeriodTemplateInput(StrictInputModel):
+    plantilla_modular_id: uuid.UUID
+
+
 class PeriodPlanningPublic(BaseModel):
     periodo_id: uuid.UUID
     carrera_ids: list[uuid.UUID]
     plan_ids: list[uuid.UUID]
+    plantilla_modular_id: uuid.UUID | None = None
 
 
 class PlanProjectionSlot(BaseModel):
@@ -33,6 +38,7 @@ class PlanProjectionSlot(BaseModel):
 
 class PlanOpeningPublic(BaseModel):
     id: uuid.UUID
+    codigo: str
     plan_id: uuid.UUID
     periodo_inicio_id: uuid.UUID
     periodo_denominacion: str
@@ -57,3 +63,14 @@ class SubjectSuggestionPublic(BaseModel):
     sin_nota: int
     aprobados: int
     recomendada: bool
+
+
+class PeriodSubjectOverviewPublic(SubjectSuggestionPublic):
+    facultad_id: uuid.UUID
+    facultad_nombre: str
+    carrera_id: uuid.UUID
+    carrera_nombre: str
+    plan_id: uuid.UUID
+    plan_codigo: str
+    plan_modalidad: str
+    plan_estado: str

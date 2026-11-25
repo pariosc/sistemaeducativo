@@ -32,6 +32,7 @@ from app.modules.notifications.models.entities import Notificacion, TipoNotifica
 from app.modules.parallel.models.entities import Curso
 from app.modules.parallel.services.calendar import first_overlap
 from app.modules.parallel.services.parallel_service import _all_occurrences, _course_output
+from app.modules.parallel.services.room_capacity import validate_course_rooms
 from app.modules.periods.models.entities import PeriodoAcademico
 
 
@@ -162,12 +163,18 @@ def student_offer(db: Session, student_id: UUID) -> list[CourseOffer]:
             )
             or 0
         )
+        try:
+            validate_course_rooms(db, course, require_all=True)
+            room_ready = True
+        except HTTPException:
+            room_ready = False
         offers.append(
             CourseOffer(
                 curso=_course_output(db, course),
                 semestre_numero=semester.numero,
                 semestre_nombre=semester.nombre,
                 cupos_disponibles=max(course.cupo - active_count, 0),
+                aula_habilitada=room_ready,
                 inscrito=course.id in enrolled,
                 prerrequisitos_pendientes=_missing_prerequisites(
                     db, student_id, entry.plan_id, entry.id, course.periodo_id
@@ -260,6 +267,7 @@ def enroll_student(db: Session, student_id: UUID, course_id: UUID) -> Enrollment
         raise HTTPException(
             status_code=409, detail="El paralelo está inactivo o tiene inscripciones cerradas"
         )
+    validate_course_rooms(db, course, require_all=True)
     authorization = db.scalar(
         select(HabilitacionInscripcion).where(
             HabilitacionInscripcion.estudiante_id == student_id,

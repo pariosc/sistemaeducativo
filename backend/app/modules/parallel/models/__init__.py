@@ -6,6 +6,7 @@ from app.modules.parallel.models.entities import (
     ExcepcionHorario,
     FeriadoPeriodo,
     HorarioClase,
+    PlantillaModular,
     TipoExcepcionHorario,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "ExcepcionHorario",
     "FeriadoPeriodo",
     "HorarioClase",
+    "PlantillaModular",
     "TipoExcepcionHorario",
 ]

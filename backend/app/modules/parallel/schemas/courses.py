@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, time
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.validation import (
     Code,
@@ -100,6 +100,11 @@ class CoursePublic(BaseModel):
     carrera_nombre: str
     periodo_id: uuid.UUID
     periodo_denominacion: str
+    apertura_plan_id: uuid.UUID | None = None
+    plantilla_modular_id: uuid.UUID | None = None
+    turno_modular: str | None = None
+    clases_objetivo: int | None = None
+    clases_programadas: int | None = None
     paralelo: str
     cupo: int
     fecha_inicio: date
@@ -126,6 +131,11 @@ class CourseScheduleUpdate(StrictInputModel):
 
 
 class RegistrationUpdate(StrictInputModel):
+    inscripcion_abierta: StrictFlag
+
+
+class BatchRegistrationUpdate(StrictInputModel):
+    curso_ids: list[uuid.UUID] = Field(min_length=1)
     inscripcion_abierta: StrictFlag
 
 

@@ -18,11 +18,26 @@ export function parseDate(iso: string): Date {
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number)
   return new Date(year, month - 1, day)
 }
+export function dateIso(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
+}
+export function addCalendarDays(iso: string, days: number) {
+  const value = parseDate(iso)
+  value.setDate(value.getDate() + days)
+  return dateIso(value)
+}
+export function mondayOf(iso: string) {
+  const value = parseDate(iso)
+  value.setDate(value.getDate() - ((value.getDay() + 6) % 7))
+  return dateIso(value)
+}
 export const formatDate = (iso: string) => { const d = parseDate(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` }
 export const formatDateWithWeekday = (iso: string) => { const d = parseDate(iso); return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` }
 export const monthShort = (iso: string) => MONTHS[parseDate(iso).getMonth()]
 export const dayOfMonth = (iso: string) => String(parseDate(iso).getDate())
 export const formatTime = (value: string | null) => (value ? value.slice(0, 5) : "")
+export const timeRangesOverlap = (leftStart: string, leftEnd: string, rightStart: string, rightEnd: string) =>
+  formatTime(leftStart) < formatTime(rightEnd) && formatTime(rightStart) < formatTime(leftEnd)
 export const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
 export function todayIso() {

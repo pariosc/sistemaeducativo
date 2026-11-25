@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react"
-import type { FormEvent, ReactNode, RefObject } from "react"
+import type { FormEvent, RefObject } from "react"
 
 import { api } from "../../api/client"
-import type { AcademicPeriod, Course, Holiday, StudentAuthorization } from "../../api/client"
+import type { AcademicPeriod, Course, Holiday } from "../../api/client"
 import { Icon } from "../shared/icons"
 import { Modal } from "../shared/Modal"
 import { ButtonLabel, DialogError, EmptyState, Field, FormActions, Notices, PageHeader, StatusBadge } from "../shared/ui"
@@ -10,7 +10,7 @@ import { dateSchema, descriptionSchema, labelSchema, messageOf } from "../shared
 import { PlanningShell } from "../planning/PlanningShell"
 import { PeriodPlanSetup } from "../planning/PeriodPlanSetup"
 import { PERIOD_STATE_LABEL, PERIOD_STATE_TONE, dayOfMonth, daysBetween, formatDate, formatDateWithWeekday, monthShort, periodState, plural, sortPeriods } from "../planning/dates"
-import type { Tone } from "../planning/dates"
+import type { PeriodState } from "../planning/dates"
 import { syncPeriodParam } from "../planning/usePeriodSelection"
 
 type Dialog = { kind: "new-period" } | { kind: "new-holiday" }
@@ -24,7 +24,6 @@ export function PeriodsPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedId, setSelectedId] = useState(() => new URLSearchParams(window.location.search).get("periodo_id") ?? "")
   const [holidays, setHolidays] = useState<Holiday[]>([])
-  const [authorizations, setAuthorizations] = useState<StudentAuthorization[]>([])
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [dialogError, setDialogError] = useState("")
   const [error, setError] = useState("")
@@ -42,14 +41,12 @@ export function PeriodsPage() {
     setSelectedId((current) => (periodData.some((period) => period.id === current) ? current : ""))
   }
   async function loadDetail(id: string) {
-    const [holidayData, authorizationData] = await Promise.all([api.listHolidays(id), api.listAuthorizations(id)])
-    setHolidays(holidayData)
-    setAuthorizations(authorizationData)
+    setHolidays(await api.listHolidays(id))
   }
 
   useEffect(() => { void reload().catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false)) }, [])
   useEffect(() => {
-    if (!selectedId) { setHolidays([]); setAuthorizations([]); return }
+    if (!selectedId) { setHolidays([]); return }
     void loadDetail(selectedId).catch((reason: Error) => setError(reason.message))
   }, [selectedId])
   // Al pasar de la lista al detalle (y viceversa) el foco va al título.
@@ -101,9 +98,7 @@ export function PeriodsPage() {
       {selected ? (
         <PeriodDetail
           period={selected}
-          courses={courses.filter((course) => course.periodo_id === selected.id)}
           holidays={holidays}
-          authorizations={authorizations}
           headingRef={headingRef}
           busy={busy}
           onBack={backToList}
@@ -131,6 +126,8 @@ function PeriodList({ periods, courses, headingRef, onNew, onOpen }: {
   onNew: () => void
   onOpen: (id: string) => void
 }) {
+  const [filter, setFilter] = useState<PeriodState | "all">("all")
+  const visible = filter === "all" ? periods : periods.filter((period) => periodState(period) === filter)
   return (
     <>
       <PageHeader
@@ -141,13 +138,22 @@ function PeriodList({ periods, courses, headingRef, onNew, onOpen }: {
         actions={<button type="button" className="ui-btn ui-btn-primary" onClick={onNew}><ButtonLabel icon="plus">Nuevo semestre</ButtonLabel></button>}
       />
 
+      {periods.length > 0 && <div className="pl-period-filter ui-field">
+        <label htmlFor="period-state-filter">Mostrar semestres</label>
+        <select id="period-state-filter" className="ui-select" value={filter} onChange={(event) => setFilter(event.target.value as PeriodState | "all")}>
+          <option value="all">Todos ({periods.length})</option>
+          <option value="current">En curso ({periods.filter((period) => periodState(period) === "current").length})</option>
+          <option value="upcoming">Próximos ({periods.filter((period) => periodState(period) === "upcoming").length})</option>
+          <option value="past">Finalizados ({periods.filter((period) => periodState(period) === "past").length})</option>
+        </select>
+      </div>}
       {periods.length === 0 ? (
         <EmptyState icon="layers" title="Aún no hay semestres académicos">
           Crea el primero con «Nuevo semestre». Después podrás cargar su calendario, programar la oferta de paralelos y habilitar a los estudiantes.
         </EmptyState>
-      ) : (
+      ) : visible.length === 0 ? <p className="pl-filter-empty">No hay semestres en este estado.</p> : (
         <ul className="pl-grid">
-          {periods.map((period) => {
+          {visible.map((period) => {
             const state = periodState(period)
             const own = courses.filter((course) => course.periodo_id === period.id)
             return (
@@ -178,13 +184,9 @@ function PeriodList({ periods, courses, headingRef, onNew, onOpen }: {
 /* Vista 2: detalle de un semestre (avance del flujo + calendario)     */
 /* ------------------------------------------------------------------ */
 
-interface Step { title: string; metric: string; hint: string; tone: Tone; badge: string; action: ReactNode }
-
-function PeriodDetail({ period, courses, holidays, authorizations, headingRef, busy, onBack, onNewHoliday, onRemoveHoliday }: {
+function PeriodDetail({ period, holidays, headingRef, busy, onBack, onNewHoliday, onRemoveHoliday }: {
   period: AcademicPeriod
-  courses: Course[]
   holidays: Holiday[]
-  authorizations: StudentAuthorization[]
   headingRef: RefObject<HTMLHeadingElement | null>
   busy: boolean
   onBack: () => void
@@ -192,32 +194,7 @@ function PeriodDetail({ period, courses, holidays, authorizations, headingRef, b
   onRemoveHoliday: (holiday: Holiday) => void
 }) {
   const state = periodState(period)
-  const open = courses.filter((course) => course.inscripcion_abierta).length
-  const enabled = authorizations.filter((item) => item.habilitada).length
   const sortedHolidays = [...holidays].sort((a, b) => a.fecha.localeCompare(b.fecha))
-
-  const offerTone: Tone = courses.length === 0 ? "amber" : open > 0 ? "green" : "gray"
-  const authTone: Tone = authorizations.length === 0 ? "gray" : enabled > 0 ? "green" : "amber"
-  // El primer paso con trabajo pendiente se destaca como "siguiente paso".
-  const nextIndex = courses.length === 0 ? 1 : authorizations.length > 0 && enabled === 0 ? 2 : -1
-
-  const steps: Step[] = [
-    {
-      title: "Calendario", metric: plural(holidays.length, "feriado registrado", "feriados registrados"), hint: "Los feriados excluyen las clases de todos los paralelos.",
-      tone: "green", badge: "Definido",
-      action: <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={onNewHoliday}><ButtonLabel icon="plus">Agregar feriado</ButtonLabel></button>,
-    },
-    {
-      title: "Oferta de paralelos", metric: `${plural(courses.length, "paralelo", "paralelos")} · ${plural(open, "abierto", "abiertos")}`, hint: "Crea paralelos con docente, cupo y horario.",
-      tone: offerTone, badge: courses.length === 0 ? "Pendiente" : open > 0 ? "En marcha" : "En preparación",
-      action: <a className={`ui-btn ui-btn-sm ${nextIndex === 1 ? "ui-btn-primary" : "ui-btn-secondary"}`} href={`/admin/paralelos?periodo_id=${period.id}`}><ButtonLabel icon="arrow">Programar oferta</ButtonLabel></a>,
-    },
-    {
-      title: "Habilitaciones", metric: authorizations.length === 0 ? "Sin estudiantes registrados" : `${enabled} de ${authorizations.length} habilitados`, hint: "Autoriza a cada estudiante a inscribirse en este semestre.",
-      tone: authTone, badge: authorizations.length === 0 ? "Sin estudiantes" : enabled > 0 ? "En marcha" : "Pendiente",
-      action: <a className={`ui-btn ui-btn-sm ${nextIndex === 2 ? "ui-btn-primary" : "ui-btn-secondary"}`} href={`/admin/habilitaciones?periodo_id=${period.id}`}><ButtonLabel icon="arrow">Habilitar estudiantes</ButtonLabel></a>,
-    },
-  ]
 
   return (
     <>
@@ -237,24 +214,6 @@ function PeriodDetail({ period, courses, holidays, authorizations, headingRef, b
       </div>
 
       <PeriodPlanSetup key={period.id} periodId={period.id} />
-
-      <section className="pl-section" aria-labelledby="steps-title">
-        <h2 id="steps-title">Preparación del semestre</h2>
-        <p className="pl-lead">Sigue los pasos en orden. El paso destacado en verde es el siguiente con trabajo pendiente.</p>
-        <ol className="pl-steps">
-          {steps.map((step, index) => (
-            <li key={step.title} className="pl-step" data-next={index === nextIndex ? "" : undefined}>
-              <span className="pl-step-n" aria-hidden="true">{index + 1}</span>
-              <div className="pl-step-body">
-                <div className="pl-step-head"><h3>{step.title}</h3><StatusBadge tone={step.tone}>{step.badge}</StatusBadge></div>
-                <p className="pl-step-metric">{step.metric}</p>
-                <p className="pl-step-hint">{step.hint}</p>
-                <div>{step.action}</div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
 
       <section className="pl-section" aria-labelledby="calendar-title">
         <div className="pl-toolbar">

@@ -13,6 +13,7 @@ from app.modules.curriculum.models.entities import (
     EstadoPlan,
     Materia,
     MateriaPlan,
+    ModalidadPlan,
     PlanEstudio,
 )
 from app.modules.enrollments.models.entities import EstadoInscripcion, Inscripcion
@@ -39,7 +40,8 @@ from app.modules.parallel.schemas.courses import (
     ScheduleExceptionPublic,
 )
 from app.modules.parallel.services.calendar import Occurrence, course_occurrences, first_overlap
-from app.modules.periods.models.entities import PeriodoAcademico, PeriodoPlan
+from app.modules.parallel.services.room_capacity import validate_course_rooms
+from app.modules.periods.models.entities import AperturaPlan, PeriodoAcademico, PeriodoPlan
 
 
 def _course_or_404(db: Session, course_id: UUID) -> Curso:
@@ -137,6 +139,41 @@ def _validate_global_conflicts(db: Session, changed_ids: set[UUID]) -> None:
     by_id = {course.id: course for course in courses}
     occurrences = _all_occurrences(db, courses)
 
+    def course_label(course: Curso) -> str:
+        entry = db.get(MateriaPlan, course.materia_plan_id)
+        subject = db.get(Materia, entry.materia_id)
+        return f"{subject.codigo} (paralelo {course.paralelo})"
+
+    # Each parallel label has its own modular sequence within the intake group.
+    # Other labels may overlap here; room, teacher and student checks still apply.
+    for index, left in enumerate(courses):
+        if left.apertura_plan_id is None or left.turno_modular is None:
+            continue
+        for right in courses[index + 1 :]:
+            if not ({left.id, right.id} & changed_ids):
+                continue
+            if (
+                left.periodo_id == right.periodo_id
+                and left.apertura_plan_id == right.apertura_plan_id
+                and left.turno_modular == right.turno_modular
+                and left.paralelo == right.paralelo
+                and left.materia_plan_id != right.materia_plan_id
+                and left.fecha_inicio <= right.fecha_fin
+                and right.fecha_inicio <= left.fecha_fin
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Las materias del mismo grupo y turno, dentro del paralelo "
+                        f"{left.paralelo}, se superponen del "
+                        f"{max(left.fecha_inicio, right.fecha_inicio).isoformat()} al "
+                        f"{min(left.fecha_fin, right.fecha_fin).isoformat()}: "
+                        f"{course_label(left)} y {course_label(right)}. "
+                        "Deben ir una después de otra; revisa el orden, "
+                        "la fecha de inicio o el turno."
+                    ),
+                )
+
     for course in courses:
         if course.id not in changed_ids:
             continue
@@ -160,8 +197,9 @@ def _validate_global_conflicts(db: Session, changed_ids: set[UUID]) -> None:
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        f"El docente tiene un cruce entre los paralelos {left.paralelo} y "
-                        f"{right.paralelo} el {overlap.isoformat()}"
+                        f"El docente tiene un cruce el {overlap.isoformat()}: "
+                        f"{course_label(left)} y {course_label(right)}. "
+                        "Elige otro docente, turno o fecha."
                     ),
                 )
 
@@ -236,8 +274,11 @@ def _validate_global_conflicts(db: Session, changed_ids: set[UUID]) -> None:
                         raise HTTPException(
                             status_code=409,
                             detail=(
-                                f"El aula {room} tiene un cruce entre los paralelos "
-                                f"{left.paralelo} y {right.paralelo} el {day.isoformat()}"
+                                f"El aula {room} tiene un cruce el {day.isoformat()} "
+                                f"de {max(start, other_start).strftime('%H:%M')} a "
+                                f"{min(end, other_end).strftime('%H:%M')}: "
+                                f"{course_label(left)} y {course_label(right)}. "
+                                "Elige otra aula, turno o fecha."
                             ),
                         )
 
@@ -283,9 +324,31 @@ def _lock_rooms(db: Session, course_ids: set[UUID]) -> None:
             )
         ).all()
     )
+    room_codes.update(
+        db.scalars(
+            select(ExcepcionHorario.aula).where(
+                ExcepcionHorario.curso_id.in_(course_ids), ExcepcionHorario.aula.is_not(None)
+            )
+        ).all()
+    )
     if room_codes:
         db.scalars(
-            select(Aula).where(Aula.codigo.in_(room_codes)).order_by(Aula.codigo).with_for_update()
+            select(Aula)
+            .where(Aula.codigo.in_(room_codes))
+            .order_by(Aula.codigo)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+
+
+def _lock_modular_groups(db: Session, group_ids: set[UUID | None]) -> None:
+    ids = sorted({group_id for group_id in group_ids if group_id}, key=str)
+    if ids:
+        db.scalars(
+            select(AperturaPlan)
+            .where(AperturaPlan.id.in_(ids))
+            .order_by(AperturaPlan.id)
+            .with_for_update()
         ).all()
 
 
@@ -318,12 +381,28 @@ def _lock_courses(db: Session, course_ids: set[UUID]) -> None:
         ).all()
 
 
-def _commit_with_conflict_check(db: Session, changed_ids: set[UUID]) -> None:
+def _commit_with_conflict_check(
+    db: Session,
+    changed_ids: set[UUID],
+    *,
+    check_capacity: bool = False,
+    require_all_rooms: bool = False,
+    allow_unconfigured: bool = False,
+) -> None:
     try:
         db.flush()
         changed_courses = db.scalars(select(Curso).where(Curso.id.in_(changed_ids))).all()
+        _lock_modular_groups(db, {course.apertura_plan_id for course in changed_courses})
         _lock_teachers(db, {course.docente_id for course in changed_courses})
         _lock_rooms(db, changed_ids)
+        if check_capacity:
+            for course in changed_courses:
+                validate_course_rooms(
+                    db,
+                    course,
+                    require_all=require_all_rooms or course.inscripcion_abierta,
+                    allow_unconfigured=allow_unconfigured,
+                )
         _validate_global_conflicts(db, changed_ids)
         db.commit()
     except HTTPException:
@@ -401,6 +480,22 @@ def _course_output(db: Session, course: Curso) -> CoursePublic:
     subject = db.get(Materia, entry.materia_id)
     period = db.get(PeriodoAcademico, course.periodo_id)
     teacher = db.get(Usuario, course.docente_id) if course.docente_id else None
+    schedules = _schedules_for(db, course.id)
+    actual_classes = (
+        len(
+            {
+                event[0]
+                for event in course_occurrences(
+                    course,
+                    schedules,
+                    _holidays_for(db, course.periodo_id),
+                    _exceptions_for(db, course.id),
+                )
+            }
+        )
+        if course.clases_objetivo is not None
+        else None
+    )
     return CoursePublic(
         id=course.id,
         materia_plan_id=course.materia_plan_id,
@@ -415,6 +510,11 @@ def _course_output(db: Session, course: Curso) -> CoursePublic:
         carrera_nombre=career.nombre,
         periodo_id=period.id,
         periodo_denominacion=period.denominacion,
+        apertura_plan_id=course.apertura_plan_id,
+        plantilla_modular_id=course.plantilla_modular_id,
+        turno_modular=course.turno_modular,
+        clases_objetivo=course.clases_objetivo,
+        clases_programadas=actual_classes,
         paralelo=course.paralelo,
         cupo=course.cupo,
         fecha_inicio=course.fecha_inicio,
@@ -431,7 +531,7 @@ def _course_output(db: Session, course: Curso) -> CoursePublic:
                 hora_fin=schedule.hora_fin,
                 aula=schedule.aula,
             )
-            for schedule in _schedules_for(db, course.id)
+            for schedule in schedules
         ],
     )
 
@@ -459,6 +559,11 @@ def create_course(db: Session, payload: CourseCreate) -> CoursePublic:
     plan = db.get(PlanEstudio, entry.plan_id)
     if plan.estado != EstadoPlan.VIGENTE:
         raise HTTPException(status_code=409, detail="El plan debe estar VIGENTE")
+    if plan.modalidad == ModalidadPlan.MODULAR and period.plantilla_modular_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Programa materias modulares desde la secuencia del grupo y turno",
+        )
     if not db.get(PeriodoPlan, (period.id, plan.id)):
         raise HTTPException(
             status_code=409, detail="Incorpora el plan al semestre antes de crear paralelos"
@@ -496,6 +601,8 @@ def update_course(db: Session, course_id: UUID, payload: CourseUpdate) -> Course
     _lock_course_students(db, {course.id})
     _lock_courses(db, {course.id})
     changes = payload.model_dump(exclude_unset=True)
+    meaningful = {name for name, value in changes.items() if getattr(course, name) != value}
+    allow_unconfigured = meaningful == {"cupo"} and changes["cupo"] < course.cupo
     for name, value in changes.items():
         setattr(course, name, value)
     if changes.get("activo") is False:
@@ -517,7 +624,13 @@ def update_course(db: Session, course_id: UUID, payload: CourseUpdate) -> Course
             status_code=409,
             detail="El cupo no puede ser menor que la cantidad de inscripciones activas",
         )
-    _commit_with_conflict_check(db, {course.id})
+    _commit_with_conflict_check(
+        db,
+        {course.id},
+        check_capacity=course.activo
+        and bool(meaningful & {"cupo", "fecha_inicio", "fecha_fin", "activo"}),
+        allow_unconfigured=allow_unconfigured,
+    )
     db.refresh(course)
     return _course_output(db, course)
 
@@ -526,9 +639,12 @@ def validate_course_update_preview(
     db: Session, course_id: UUID, payload: CourseUpdate
 ) -> dict[str, bool]:
     course = _course_or_404(db, course_id)
+    changes = payload.model_dump(exclude_unset=True)
+    meaningful = {name for name, value in changes.items() if getattr(course, name) != value}
+    allow_unconfigured = meaningful == {"cupo"} and changes["cupo"] < course.cupo
     preview = db.begin_nested()
     try:
-        for name, value in payload.model_dump(exclude_unset=True).items():
+        for name, value in changes.items():
             setattr(course, name, value)
         _validate_course_period(db, course)
         _validate_teacher(db, course.docente_id)
@@ -539,6 +655,13 @@ def validate_course_update_preview(
                 detail="El cupo no puede ser menor que la cantidad de inscripciones activas",
             )
         db.flush()
+        if meaningful & {"cupo", "fecha_inicio", "fecha_fin", "activo"} and course.activo:
+            validate_course_rooms(
+                db,
+                course,
+                require_all=course.inscripcion_abierta,
+                allow_unconfigured=allow_unconfigured,
+            )
         _validate_global_conflicts(db, {course.id})
     except IntegrityError as exc:
         preview.rollback()
@@ -599,7 +722,7 @@ def replace_schedules(
     if old_schedules != new_schedules:
         add_course_schedule_notifications(db, course)
     _validate_exception_bounds(db, course)
-    _commit_with_conflict_check(db, {course.id})
+    _commit_with_conflict_check(db, {course.id}, check_capacity=True)
     db.refresh(course)
     return _course_output(db, course)
 
@@ -641,6 +764,7 @@ def validate_schedule_preview(
         )
         db.flush()
         _validate_exception_bounds(db, course)
+        validate_course_rooms(db, course, require_all=course.inscripcion_abierta)
         _validate_global_conflicts(db, {course.id})
     except Exception:
         preview.rollback()
@@ -653,28 +777,51 @@ def set_registration_open(db: Session, course_id: UUID, opened: bool) -> CourseP
     course = _course_or_404(db, course_id)
     _lock_courses(db, {course.id})
     if opened:
-        _validate_course_period(db, course)
-        _validate_teacher(db, course.docente_id)
-        if not course.activo:
-            raise HTTPException(
-                status_code=409, detail="Activa el paralelo antes de abrir inscripciones"
-            )
-        if course.docente_id is None:
-            raise HTTPException(
-                status_code=409, detail="Asigna un docente antes de abrir inscripciones"
-            )
-        if not _schedules_for(db, course.id):
-            raise HTTPException(
-                status_code=409, detail="Agrega un horario antes de abrir inscripciones"
-            )
-        entry = db.get(MateriaPlan, course.materia_plan_id)
-        plan = db.get(PlanEstudio, entry.plan_id)
-        if plan.estado != EstadoPlan.VIGENTE:
-            raise HTTPException(status_code=409, detail="El plan debe estar VIGENTE")
+        _require_openable(db, course)
     course.inscripcion_abierta = opened
-    _commit_with_conflict_check(db, {course.id})
+    _commit_with_conflict_check(db, {course.id}, check_capacity=opened, require_all_rooms=opened)
     db.refresh(course)
     return _course_output(db, course)
+
+
+def _require_openable(db: Session, course: Curso) -> None:
+    _validate_course_period(db, course)
+    _validate_teacher(db, course.docente_id)
+    if not course.activo:
+        raise HTTPException(
+            status_code=409, detail="Activa el paralelo antes de abrir inscripciones"
+        )
+    if course.docente_id is None:
+        raise HTTPException(
+            status_code=409, detail="Asigna un docente antes de abrir inscripciones"
+        )
+    if not _schedules_for(db, course.id):
+        raise HTTPException(
+            status_code=409, detail="Agrega un horario antes de abrir inscripciones"
+        )
+    entry = db.get(MateriaPlan, course.materia_plan_id)
+    plan = db.get(PlanEstudio, entry.plan_id)
+    if plan.estado != EstadoPlan.VIGENTE:
+        raise HTTPException(status_code=409, detail="El plan debe estar VIGENTE")
+
+
+def set_registration_open_many(
+    db: Session, period_id: UUID, course_ids: set[UUID], opened: bool
+) -> list[CoursePublic]:
+    _period_or_404(db, period_id)
+    _lock_courses(db, course_ids)
+    courses = db.scalars(select(Curso).where(Curso.id.in_(course_ids)).order_by(Curso.id)).all()
+    if len(courses) != len(course_ids) or any(course.periodo_id != period_id for course in courses):
+        raise HTTPException(
+            status_code=404, detail="Uno o más paralelos no pertenecen a este semestre"
+        )
+    if opened:
+        for course in courses:
+            _require_openable(db, course)
+    for course in courses:
+        course.inscripcion_abierta = opened
+    _commit_with_conflict_check(db, course_ids, check_capacity=opened, require_all_rooms=opened)
+    return [_course_output(db, course) for course in courses]
 
 
 def delete_course(db: Session, course_id: UUID) -> None:
@@ -805,7 +952,7 @@ def create_exception(
     exception = ExcepcionHorario(curso_id=course.id, **payload.model_dump())
     db.add(exception)
     add_course_schedule_notifications(db, course)
-    _commit_with_conflict_check(db, {course.id})
+    _commit_with_conflict_check(db, {course.id}, check_capacity=True)
     db.refresh(exception)
     return ScheduleExceptionPublic.model_validate(exception)
 
@@ -823,4 +970,4 @@ def delete_exception(db: Session, course_id: UUID, exception_id: UUID) -> None:
         raise HTTPException(status_code=404, detail="Excepción de horario no encontrada")
     db.delete(exception)
     add_course_schedule_notifications(db, _course_or_404(db, course_id))
-    _commit_with_conflict_check(db, {course_id})
+    _commit_with_conflict_check(db, {course_id}, check_capacity=True)

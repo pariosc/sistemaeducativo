@@ -10,6 +10,8 @@ from app.modules.periods.schemas.planning import (
     PeriodCareerInput,
     PeriodPlanInput,
     PeriodPlanningPublic,
+    PeriodSubjectOverviewPublic,
+    PeriodTemplateInput,
     PlanOpeningInput,
     PlanOpeningPublic,
     SubjectSuggestionPublic,
@@ -34,6 +36,18 @@ async def post_period(payload: PeriodCreate, _: AdminUser, db: DbSession):
 @router.get("/{period_id}/planning", response_model=PeriodPlanningPublic)
 async def get_period_planning(period_id: UUID, _: AdminUser, db: DbSession):
     return planning_service.period_planning(db, period_id)
+
+
+@router.get("/{period_id}/planning/overview", response_model=list[PeriodSubjectOverviewPublic])
+async def get_period_subject_overview(period_id: UUID, _: AdminUser, db: DbSession):
+    return planning_service.period_subject_overview(db, period_id)
+
+
+@router.put("/{period_id}/planning/modular-template", response_model=PeriodPlanningPublic)
+async def put_period_modular_template(
+    period_id: UUID, payload: PeriodTemplateInput, _: AdminUser, db: DbSession
+):
+    return planning_service.set_modular_template(db, period_id, payload.plantilla_modular_id)
 
 
 @router.post("/{period_id}/careers", response_model=PeriodPlanningPublic)
@@ -67,6 +81,11 @@ async def post_plan_opening(
     period_id: UUID, payload: PlanOpeningInput, _: AdminUser, db: DbSession
 ):
     return planning_service.create_opening(db, period_id, payload.plan_id)
+
+
+@router.delete("/{period_id}/openings/{opening_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plan_opening(period_id: UUID, opening_id: UUID, _: AdminUser, db: DbSession):
+    planning_service.remove_opening(db, period_id, opening_id)
 
 
 @router.get("/{period_id}/plans/{plan_id}/openings", response_model=list[PlanOpeningPublic])

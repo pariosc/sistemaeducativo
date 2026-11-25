@@ -5,6 +5,108 @@ from app.tests.test_parallel import ORIGIN, admin_login
 pytestmark = pytest.mark.anyio
 
 
+async def test_empty_plan_opening_can_be_undone_but_assigned_group_cannot(client):
+    await admin_login(client)
+
+    async def post(path, payload):
+        response = await client.post(path, json=payload, headers=ORIGIN)
+        assert response.status_code in (200, 201), response.text
+        return response.json()
+
+    faculty = await post("/api/v1/admin/faculties", {"codigo": "UNDO", "nombre": "Facultad Undo"})
+    career = await post(
+        "/api/v1/admin/careers",
+        {"codigo": "UNDO", "nombre": "Carrera Undo", "facultad_id": faculty["id"]},
+    )
+    plan = await post(
+        "/api/v1/admin/plans",
+        {"carrera_id": career["id"], "codigo": "UNDO-2027", "modalidad": "SEMESTRAL"},
+    )
+    unit = await post(
+        f"/api/v1/admin/plans/{plan['id']}/units",
+        {"numero": 1, "nombre": "Semestre 1"},
+    )
+    subject = await post("/api/v1/admin/subjects", {"codigo": "UNDO1", "nombre": "Materia Undo"})
+    await post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects",
+        {"materia_id": subject["id"], "unidad_id": unit["id"]},
+    )
+    published = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}", json={"estado": "VIGENTE"}, headers=ORIGIN
+    )
+    assert published.status_code == 200
+    period = await post(
+        "/api/v1/admin/periods",
+        {"denominacion": "Undo 2027-1", "fecha_inicio": "2027-01-01", "fecha_fin": "2027-06-30"},
+    )
+    await post(f"/api/v1/admin/periods/{period['id']}/careers", {"carrera_id": career["id"]})
+    await post(f"/api/v1/admin/periods/{period['id']}/plans", {"plan_id": plan["id"]})
+    opening = await post(f"/api/v1/admin/periods/{period['id']}/openings", {"plan_id": plan["id"]})
+    assert opening["codigo"].startswith("UNDO-UNDO-2027-1-G")
+    assert [slot["semestre_numero"] for slot in opening["proyeccion"]] == [1]
+    duplicate = await client.post(
+        f"/api/v1/admin/periods/{period['id']}/openings",
+        json={"plan_id": plan["id"]},
+        headers=ORIGIN,
+    )
+    assert duplicate.status_code == 409
+    another_plan = await post(
+        "/api/v1/admin/plans",
+        {"carrera_id": career["id"], "codigo": "UNDO-2027B", "modalidad": "SEMESTRAL"},
+    )
+    another_unit = await post(
+        f"/api/v1/admin/plans/{another_plan['id']}/units",
+        {"numero": 1, "nombre": "Semestre 1"},
+    )
+    await post(
+        f"/api/v1/admin/plans/{another_plan['id']}/subjects",
+        {"materia_id": subject["id"], "unidad_id": another_unit["id"]},
+    )
+    assert (
+        await client.patch(
+            f"/api/v1/admin/plans/{another_plan['id']}",
+            json={"estado": "VIGENTE"},
+            headers=ORIGIN,
+        )
+    ).status_code == 200
+    await post(
+        f"/api/v1/admin/periods/{period['id']}/plans",
+        {"plan_id": another_plan["id"]},
+    )
+    same_career = await client.post(
+        f"/api/v1/admin/periods/{period['id']}/openings",
+        json={"plan_id": another_plan["id"]},
+        headers=ORIGIN,
+    )
+    assert same_career.status_code == 409
+    path = f"/api/v1/admin/periods/{period['id']}/openings/{opening['id']}"
+    removed = await client.delete(path, headers=ORIGIN)
+    assert removed.status_code == 204
+    assert (await client.delete(path, headers=ORIGIN)).status_code == 404
+    opening = await post(f"/api/v1/admin/periods/{period['id']}/openings", {"plan_id": plan["id"]})
+    student = await post(
+        "/api/v1/admin/users",
+        {
+            "ci": "UNDO-S1",
+            "nombres": "Estudiante",
+            "apellidos": "Undo",
+            "correo": "undo@example.edu",
+            "telefono": "70000999",
+            "rol": "ESTUDIANTE",
+        },
+    )
+    assigned = await client.put(
+        f"/api/v1/admin/students/{student['id']}/plan",
+        json={"plan_estudio_id": plan["id"], "apertura_plan_id": opening["id"]},
+        headers=ORIGIN,
+    )
+    assert assigned.status_code == 200
+    blocked = await client.delete(
+        f"/api/v1/admin/periods/{period['id']}/openings/{opening['id']}", headers=ORIGIN
+    )
+    assert blocked.status_code == 409
+
+
 @pytest.mark.parametrize("modality", ["MODULAR", "SEMESTRAL"])
 async def test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_period(
     client, modality
@@ -101,6 +203,15 @@ async def test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_pe
         )
         assert selected_plan.status_code == 200
 
+    boundary_overlap = await post(
+        "/api/v1/admin/periods",
+        {
+            "denominacion": "Límite solapado 2027",
+            "fecha_inicio": "2027-06-30",
+            "fecha_fin": "2027-06-30",
+        },
+    )
+    assert boundary_overlap["id"]
     first_opening = await post(
         f"/api/v1/admin/periods/{periods[0]['id']}/openings", {"plan_id": plan["id"]}
     )
@@ -108,11 +219,25 @@ async def test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_pe
         f"/api/v1/admin/periods/{periods[1]['id']}/openings", {"plan_id": plan["id"]}
     )
     assert first_opening["id"] != second_opening["id"]
+    assert first_opening["codigo"] != second_opening["codigo"]
+    overlapping = await post(
+        "/api/v1/admin/periods",
+        {
+            "denominacion": "Solapado 2027",
+            "fecha_inicio": "2027-04-01",
+            "fecha_fin": "2027-05-31",
+        },
+    )
+    assert overlapping["id"]
     openings = await client.get(
         f"/api/v1/admin/periods/{periods[1]['id']}/plans/{plan['id']}/openings"
     )
     assert openings.status_code == 200
     assert [row["semestre_proyectado"] for row in openings.json()] == [2, 1]
+    assert [slot["periodo_denominacion"] for slot in openings.json()[0]["proyeccion"]] == [
+        "2027-1",
+        "2027-2",
+    ]
     assert [slot["periodo_denominacion"] for slot in openings.json()[1]["proyeccion"]] == [
         "2027-2",
         "2028-1",
@@ -175,6 +300,8 @@ async def test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_pe
             assert authorized.status_code == 200
         students.append(student)
 
+    room = await post("/api/v1/admin/planning/rooms", {"codigo": "PROGRESO", "capacidad": 40})
+
     async def course(entry_id, period, start, end, parallel="A"):
         created = await post(
             "/api/v1/admin/courses",
@@ -191,7 +318,14 @@ async def test_plan_can_start_multiple_groups_and_prerequisites_wait_for_next_pe
         scheduled = await client.put(
             f"/api/v1/admin/courses/{created['id']}/schedules",
             json={
-                "horarios": [{"dia_semana": "LUNES", "hora_inicio": "08:00", "hora_fin": "09:00"}]
+                "horarios": [
+                    {
+                        "dia_semana": "LUNES",
+                        "hora_inicio": "08:00",
+                        "hora_fin": "09:00",
+                        "aula": room["codigo"],
+                    }
+                ]
             },
             headers=ORIGIN,
         )
