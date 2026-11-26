@@ -7,7 +7,7 @@ setup:
 
 principal:
 	docker compose up -d --wait db
-	cd backend && uv run alembic upgrade head
+	cd backend && uv run python -m alembic upgrade head
 	cd backend && uv run python -m app.cli create-principal
 
 dev:

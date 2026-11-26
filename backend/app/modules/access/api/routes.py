@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.api.deps import (
     DbSession,
@@ -103,9 +103,11 @@ async def update_profile(
 
 @router.get("/admin/users", response_model=list[UserPublic])
 async def list_users(
-    actor: Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))], db: DbSession
+    actor: Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))],
+    db: DbSession,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ):
-    return UserRepository(db).list_visible(actor.es_administrador_principal)
+    return UserRepository(db).list_visible(actor.es_administrador_principal, q)
 
 
 @router.post("/admin/users", response_model=UserCreated, status_code=status.HTTP_201_CREATED)

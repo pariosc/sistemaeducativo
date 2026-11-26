@@ -33,11 +33,11 @@ try {
 
         Push-Location (Join-Path $root "backend")
         try {
-            & uv run alembic upgrade head
+            & uv run python -m alembic upgrade head
             if ($LASTEXITCODE -ne 0) { throw "Falló la aplicación de migraciones." }
         } finally { Pop-Location }
 
-        $backend = Start-Process -FilePath "uv" -ArgumentList @("run", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8100") -WorkingDirectory (Join-Path $root "backend") -NoNewWindow -PassThru
+        $backend = Start-Process -FilePath "uv" -ArgumentList @("run", "python", "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8100") -WorkingDirectory (Join-Path $root "backend") -NoNewWindow -PassThru
         $processes.Add($backend)
         $frontend = Start-Process -FilePath "bun" -ArgumentList @("run", "dev") -WorkingDirectory (Join-Path $root "frontend") -NoNewWindow -PassThru
         $processes.Add($frontend)

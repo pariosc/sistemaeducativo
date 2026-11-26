@@ -190,7 +190,7 @@ CI y correo son únicos y los campos obligatorios deben validarse. La autenticac
 
 #### RN03 Perfil y contraseñas
 
-Todos los roles pueden consultar su perfil. Docentes y estudiantes no pueden editar datos personales propios: solicitan correcciones a Administración Académica. El administrador puede actualizar su propio teléfono y corregir nombres, apellidos, CI y teléfono de docentes y estudiantes desde la gestión de usuarios; el correo no se edita. Las contraseñas nuevas tienen un mínimo de 8 y un máximo de 128 caracteres. Todos los roles deben cambiarlas en el primer ingreso; restablecer acceso establece una contraseña temporal y también obliga a cambiarla. El servidor limita las operaciones hasta completar el cambio; al guardar la contraseña nueva revoca las sesiones y exige autenticarse nuevamente. El cambio verifica la contraseña actual. El administrador común opera sobre docentes y estudiantes; el principal también sobre otros administradores.
+Todos los roles pueden consultar su perfil. Docentes y estudiantes no pueden editar datos personales propios: solicitan correcciones a Administración Académica. El administrador puede actualizar su propio teléfono y corregir nombres, apellidos, CI, teléfono, dirección y fecha de nacimiento de docentes y estudiantes, más título y especialidad de docentes, desde la gestión de usuarios; el correo no se edita. En el alta y la corrección de estudiantes también puede asignar plan y grupo de ingreso. La ficha administrativa admite búsqueda por identidad, dirección, datos profesionales, carrera, plan y grupo, y ofrece un detalle de solo lectura. Título y especialidad solo aplican a docentes; plan y grupo solo a estudiantes. El plan no puede estar inactivo, su carrera y facultad deben estar activas y el grupo debe pertenecer al plan. Si el estudiante ya tiene inscripciones, el plan o el grupo se corrigen desde Planes de estudio. Las contraseñas nuevas tienen un mínimo de 8 y un máximo de 128 caracteres. Todos los roles deben cambiarlas en el primer ingreso; restablecer acceso establece una contraseña temporal y también obliga a cambiarla. El servidor limita las operaciones hasta completar el cambio; al guardar la contraseña nueva revoca las sesiones y exige autenticarse nuevamente. El cambio verifica la contraseña actual. El administrador común opera sobre docentes y estudiantes; el principal también sobre otros administradores.
 
 #### RN04 Carreras
 
@@ -1068,11 +1068,11 @@ Ruta propuesta: /perfil
 
 Objetivo: Consultar perfil propio; cambiar la contraseña propia y permitir edición de teléfono solo a Administración.
 
-Funcionalidades: Mostrar datos personales a todos los roles; permitir al administrador actualizar su teléfono; mostrar el perfil de Docentes y Estudiantes en solo lectura; cambiar contraseña mediante verificación de la actual.
+Funcionalidades: Mostrar datos personales y académicos a todos los roles según corresponda; permitir al administrador actualizar su teléfono; mostrar el perfil de Docentes y Estudiantes en solo lectura; cambiar contraseña mediante verificación de la actual.
 
 Acciones y botones previstos: Administrador: guardar teléfono. Docente/Estudiante: consultar datos. Todos los roles: cambiar contraseña.
 
-Campos principales: Datos de cuenta en lectura; teléfono editable solo para Administrador; contraseña actual y nueva en el formulario correspondiente.
+Campos principales: Datos de cuenta en lectura; dirección y fecha de nacimiento; título y especialidad para docentes; carrera, plan y grupo de ingreso para estudiantes; teléfono editable solo para Administrador; contraseña actual y nueva en el formulario correspondiente.
 
 Validaciones: Rechazar desde API la edición de perfil por Docentes y Estudiantes; la gestión administrativa valida los campos corregibles. Rechazar cambios de CI, correo y rol desde perfil; comprobar contraseña actual.
 
@@ -1088,13 +1088,13 @@ Ruta propuesta: /admin/usuarios
 
 Objetivo: Gestionar cuentas permitidas y habilitar estudiantes por periodo.
 
-Funcionalidades: Alta, consulta, corrección de identidad y teléfono, activación/inactivación y restablecimiento según privilegios; asignación de plan; habilitación individual. Solo el principal ve gestión de otros administradores.
+Funcionalidades: Alta, consulta, búsqueda, detalle, corrección de identidad y datos de contacto, activación/inactivación y restablecimiento según privilegios; asignación de plan y grupo de ingreso; habilitación individual. Solo el principal ve gestión de otros administradores.
 
-Acciones y botones previstos: Registrar; corregir identidad y teléfono; activar/inactivar; restablecer clave; asignar plan; habilitar/revocar por periodo.
+Acciones y botones previstos: Registrar; ver detalle; corregir datos; activar/inactivar; restablecer clave; asignar plan; habilitar/revocar por periodo.
 
-Campos principales: Nombres, apellidos, CI, correo, teléfono, rol permitido, activo; estudiante, carrera/plan, periodo, habilitación, origen y fecha. No editar el privilegio principal por un administrador común.
+Campos principales: Nombres, apellidos, CI, correo, teléfono, dirección y fecha de nacimiento; rol permitido, activo; título y especialidad para docentes; carrera, plan y grupo de ingreso para estudiantes; periodo, habilitación, origen y fecha. No editar el privilegio principal por un administrador común.
 
-Validaciones: Campos obligatorios, CI/correo únicos, restricciones del principal, plan correspondiente y habilitación por estudiante/periodo; conservar historial.
+Validaciones: Campos obligatorios, CI/correo únicos, restricciones del principal, longitud de los datos opcionales, campos profesionales solo para docentes, plan/grupo solo para estudiantes, plan correspondiente y habilitación por estudiante/periodo; conservar historial.
 
 RF relacionados: RF01, RF02, RF03, RF05, RF10, RF18, RF42, RF43
 
@@ -1597,6 +1597,7 @@ Tabla 46. 14.7 Observaciones y cambios de versión
 | UML y exportación | Se conserva el PlantUML v8 del dominio y el contenido del Draw.io definitivo. Las fuentes complementarias no sustituyen la versión Draw.io preferida. |
 | Contraseñas temporales | El modelo v8 no incluye el indicador persistente. La implementación agrega el indicador, contraseña temporal y cambio obligatorio para todos los roles; el informe debe describir esta ampliación física. |
 | Perfil de Docente y Estudiante | Cambio funcional confirmado después de v8: estos roles consultan sus datos en solo lectura y no pueden editar datos personales propios. Administración corrige los datos permitidos desde gestión de usuarios. El administrador puede actualizar su propio teléfono. El cambio de contraseña sigue disponible para todos. Se conservan RF07/RF08 y HU05. |
+| Fichas ampliadas de usuario | Decisión confirmada el 26-11-2026: dirección y fecha de nacimiento para todas las cuentas, título y especialidad para docentes, y carrera/plan/grupo de ingreso para estudiantes. Administración registra y corrige esos datos; la búsqueda y el detalle consolidan la ficha sin sustituir la asignación formal de plan desde Planes de estudio ni permitir edición propia. No se crean RF ni permisos nuevos. |
 | Planificación visual, aulas y turnos | Cambio funcional confirmado durante el rediseño: P08 agrega vista semanal conjunta por periodo y catálogo sencillo de códigos de aula. Se configuran franjas para Madrugada, Mañana, Tarde y Noche; elegir una copia sus horas al paralelo, sin propagación retroactiva. Los cruces de aula se validan por fecha real y solapamiento horario en el servidor. La configuración usa `/admin/planificacion-config`; no cambia la independencia entre habilitación y apertura. |
 | Turno modular habitual | Implementado: una franja activa por turno puede marcarse como predeterminada modular. Debe coincidir con la duración de la plantilla del semestre; al programar se proponen cinco días, de lunes a viernes, con esas horas. La duración es configurable y tres horas es solo el valor inicial. El horario de cada paralelo queda copiado y puede editarse después desde su detalle. La edición completa antes de guardar permanece pendiente de interfaz. |
 | Presencialidad y capacidad de aulas | Decisión confirmada e implementada: las clases programadas son presenciales; para abrir inscripciones cada horario requiere aula. El aula tiene capacidad física y el paralelo conserva un cupo académico que puede ser menor. Un paralelo puede usar aulas distintas por día y su cupo no supera la capacidad de la menor aula de sus horarios semanales. Una sesión reprogramada a otra aula se rechaza si la capacidad sustituta es menor que el cupo. Reducir la capacidad del aula se rechaza si algún paralelo activo con clases futuras allí tiene cupo mayor; los ya terminados no bloquean el cambio. La interfaz avisa durante la edición y el servidor rechaza cupos incompatibles. Las aulas previas a la migración `0013` quedan sin capacidad hasta registrar su número real de asientos. |

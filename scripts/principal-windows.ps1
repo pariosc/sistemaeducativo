@@ -21,7 +21,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "PostgreSQL no inició. Comprueba que Docker Desktop esté abierto y saludable." }
     Push-Location (Join-Path $root "backend")
     try {
-        & uv run alembic upgrade head
+        & uv run python -m alembic upgrade head
         if ($LASTEXITCODE -ne 0) { throw "Falló la aplicación de migraciones." }
         & uv run python -m app.cli create-principal
         if ($LASTEXITCODE -ne 0) { throw "No se pudo crear el administrador principal." }

@@ -1,5 +1,7 @@
 import uuid
+from datetime import date
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -11,11 +13,13 @@ from pydantic import (
     model_validator,
 )
 
-from app.core.validation import CI, PersonName, Phone, StrictFlag
+from app.core.validation import CI, PersonName, Phone, StrictFlag, descriptive_text
 from app.modules.access.models.user import UserRole
 
 PasswordNew = Annotated[str, StringConstraints(min_length=8, max_length=128)]
 CredentialText = Annotated[str, Field(min_length=1, max_length=128)]
+Direccion = descriptive_text(200)
+ProfessionalText = descriptive_text(120)
 
 
 class StrictInputModel(BaseModel):
@@ -31,6 +35,16 @@ class UserPublic(BaseModel):
     apellidos: str
     correo: EmailStr
     telefono: str
+    direccion: str | None
+    fecha_nacimiento: date | None
+    titulo: str | None
+    especialidad: str | None
+    plan_estudio_id: UUID | None
+    apertura_plan_id: UUID | None
+    plan_codigo: str | None
+    carrera_codigo: str | None
+    carrera_nombre: str | None
+    apertura_codigo: str | None
     rol: UserRole
     es_administrador_principal: bool
     activo: bool
@@ -60,6 +74,12 @@ class UserCreate(StrictInputModel):
     apellidos: PersonName
     correo: EmailStr
     telefono: Phone
+    direccion: Direccion | None = None
+    fecha_nacimiento: date | None = None
+    titulo: ProfessionalText | None = None
+    especialidad: ProfessionalText | None = None
+    plan_estudio_id: UUID | None = None
+    apertura_plan_id: UUID | None = None
     rol: UserRole
 
     @field_validator("correo")
@@ -73,6 +93,12 @@ class UserUpdate(StrictInputModel):
     nombres: PersonName | None = None
     apellidos: PersonName | None = None
     telefono: Phone | None = None
+    direccion: Direccion | None = None
+    fecha_nacimiento: date | None = None
+    titulo: ProfessionalText | None = None
+    especialidad: ProfessionalText | None = None
+    plan_estudio_id: UUID | None = None
+    apertura_plan_id: UUID | None = None
     activo: StrictFlag | None = None
 
     @model_validator(mode="after")

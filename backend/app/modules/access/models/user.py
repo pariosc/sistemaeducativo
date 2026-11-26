@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -24,6 +25,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.modules.curriculum.models.entities import PlanEstudio
+    from app.modules.periods.models.entities import AperturaPlan
 
 
 class UserRole(StrEnum):
@@ -56,6 +58,8 @@ class Usuario(Base):
     apellidos: Mapped[str] = mapped_column(String(120), nullable=False)
     correo: Mapped[str] = mapped_column(String(254), nullable=False)
     telefono: Mapped[str] = mapped_column(String(40), nullable=False)
+    direccion: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fecha_nacimiento: Mapped[date | None] = mapped_column(Date, nullable=True)
     contrasena_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     rol: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="rol_usuario", native_enum=False, length=20), nullable=False
@@ -75,6 +79,44 @@ class Usuario(Base):
         back_populates="usuario", cascade="all, delete-orphan", uselist=False
     )
 
+    @property
+    def titulo(self) -> str | None:
+        return self.perfil_docente.titulo if self.perfil_docente else None
+
+    @property
+    def especialidad(self) -> str | None:
+        return self.perfil_docente.especialidad if self.perfil_docente else None
+
+    @property
+    def plan_estudio_id(self) -> uuid.UUID | None:
+        return self.perfil_estudiante.plan_estudio_id if self.perfil_estudiante else None
+
+    @property
+    def apertura_plan_id(self) -> uuid.UUID | None:
+        return self.perfil_estudiante.apertura_plan_id if self.perfil_estudiante else None
+
+    @property
+    def plan_codigo(self) -> str | None:
+        if self.perfil_estudiante and self.perfil_estudiante.plan_estudio:
+            return self.perfil_estudiante.plan_estudio.codigo
+        return None
+
+    @property
+    def carrera_codigo(self) -> str | None:
+        plan = self.perfil_estudiante.plan_estudio if self.perfil_estudiante else None
+        return plan.carrera.codigo if plan else None
+
+    @property
+    def carrera_nombre(self) -> str | None:
+        plan = self.perfil_estudiante.plan_estudio if self.perfil_estudiante else None
+        return plan.carrera.nombre if plan else None
+
+    @property
+    def apertura_codigo(self) -> str | None:
+        if self.perfil_estudiante and self.perfil_estudiante.apertura_plan:
+            return self.perfil_estudiante.apertura_plan.codigo
+        return None
+
 
 class PerfilDocente(Base):
     __tablename__ = "perfiles_docente"
@@ -83,6 +125,8 @@ class PerfilDocente(Base):
         Uuid(as_uuid=True), ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True
     )
     usuario: Mapped[Usuario] = relationship(back_populates="perfil_docente")
+    titulo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    especialidad: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class PerfilEstudiante(Base):
@@ -99,6 +143,7 @@ class PerfilEstudiante(Base):
     )
     usuario: Mapped[Usuario] = relationship(back_populates="perfil_estudiante")
     plan_estudio: Mapped[PlanEstudio | None] = relationship(back_populates="estudiantes")
+    apertura_plan: Mapped[AperturaPlan | None] = relationship()
 
 
 class SesionAutenticacion(Base):

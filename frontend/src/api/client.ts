@@ -7,6 +7,16 @@ export interface User {
   apellidos: string
   correo: string
   telefono: string
+  direccion: string | null
+  fecha_nacimiento: string | null
+  titulo: string | null
+  especialidad: string | null
+  plan_estudio_id: string | null
+  apertura_plan_id: string | null
+  plan_codigo: string | null
+  carrera_codigo: string | null
+  carrera_nombre: string | null
+  apertura_codigo: string | null
   rol: Role
   es_administrador_principal: boolean
   activo: boolean
@@ -24,7 +34,27 @@ export interface UserInput {
   apellidos: string
   correo: string
   telefono: string
+  direccion?: string | null
+  fecha_nacimiento?: string | null
+  titulo?: string | null
+  especialidad?: string | null
+  plan_estudio_id?: string | null
+  apertura_plan_id?: string | null
   rol: Role
+}
+
+export interface UserUpdateInput {
+  ci?: string
+  nombres?: string
+  apellidos?: string
+  telefono?: string
+  direccion?: string
+  fecha_nacimiento?: string
+  titulo?: string
+  especialidad?: string
+  plan_estudio_id?: string
+  apertura_plan_id?: string
+  activo?: boolean
 }
 
 export interface Career {
@@ -352,13 +382,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ telefono }),
     }),
-  listUsers: () => request<User[]>("/api/v1/admin/users"),
+  listUsers: (query = "") =>
+    request<User[]>(
+      `/api/v1/admin/users${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`,
+    ),
   createUser: (user: UserInput) =>
     request<User & { contrasena_temporal: string }>("/api/v1/admin/users", {
       method: "POST",
       body: JSON.stringify(user),
     }),
-  updateUser: (id: string, data: Partial<Pick<User, "ci" | "nombres" | "apellidos" | "telefono" | "activo">>) =>
+  updateUser: (id: string, data: UserUpdateInput) =>
     request<User>(`/api/v1/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),

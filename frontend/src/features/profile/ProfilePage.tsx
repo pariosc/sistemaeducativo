@@ -6,6 +6,7 @@ import type { User } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { AppShell, PageLoading, RoleChip } from "../shared/AppShell"
 import { Icon } from "../shared/icons"
+import type { IconName } from "../shared/icons"
 import { ButtonLabel, Field, Notices, PageHeader } from "../shared/ui"
 import { messageOf, phoneSchema } from "../shared/validation"
 
@@ -46,15 +47,26 @@ export function ProfilePage() {
 
   if (!profile || !user) return <AppShell><PageLoading>Cargando perfil…</PageLoading></AppShell>
 
-  const details: { icon: "idcard" | "mail" | "phone"; label: string; value: string }[] = [
+  const details: { icon: IconName; label: string; value: string }[] = [
     { icon: "idcard", label: "CI", value: profile.ci },
     { icon: "mail", label: "Correo", value: profile.correo },
     { icon: "phone", label: "Teléfono", value: profile.telefono },
+    { icon: "building", label: "Dirección", value: profile.direccion ?? "No registrada" },
+    { icon: "calendar", label: "Fecha de nacimiento", value: profile.fecha_nacimiento ?? "No registrada" },
   ]
+  if (profile.rol === "DOCENTE") {
+    details.push({ icon: "award", label: "Título", value: profile.titulo ?? "No registrado" })
+    details.push({ icon: "book", label: "Especialidad", value: profile.especialidad ?? "No registrada" })
+  }
+  if (profile.rol === "ESTUDIANTE") {
+    details.push({ icon: "graduation", label: "Carrera", value: profile.carrera_nombre ?? "No asignada" })
+    details.push({ icon: "book", label: "Plan", value: profile.plan_codigo ?? "No asignado" })
+    details.push({ icon: "calendar", label: "Grupo de ingreso", value: profile.apertura_codigo ?? "No asignado" })
+  }
 
   return (
     <AppShell>
-      <PageHeader eyebrow="MI CUENTA" title="Mi perfil" description={user.rol === "ADMINISTRADOR" ? "Consulta tus datos personales y actualiza tu teléfono." : "Consulta tus datos personales. Para corregirlos, solicita ayuda a Administración Académica."} />
+      <PageHeader eyebrow="MI CUENTA" title="Mi perfil" description={user.rol === "ADMINISTRADOR" ? "Consulta tus datos personales y actualiza tu teléfono." : "Consulta tus datos personales y académicos. Para corregirlos, solicita ayuda a Administración Académica."} />
       <Notices notice={message} error={error} />
 
       <div className="pf-layout">
@@ -91,7 +103,7 @@ export function ProfilePage() {
         ) : (
           <section className="ui-card pf-edit" aria-labelledby="pf-edit-title">
             <h2 id="pf-edit-title">Datos personales de solo lectura</h2>
-            <p className="pf-note">Para corregir tu CI, nombre, apellido o teléfono, solicita el cambio a Administración Académica.</p>
+            <p className="pf-note">Para corregir tus datos personales o académicos, solicita el cambio a Administración Académica.</p>
           </section>
         )}
       </div>

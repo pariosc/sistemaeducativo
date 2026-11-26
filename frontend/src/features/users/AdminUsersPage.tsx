@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import type { FormEvent } from "react"
 
 import { api } from "../../api/client"
-import type { Role, User } from "../../api/client"
+import type { PlanOpening, Role, StudyPlan, User, UserUpdateInput } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { AppShell, PageLoading, RoleChip } from "../shared/AppShell"
 import { Icon } from "../shared/icons"
@@ -11,8 +11,44 @@ import { ButtonLabel, ConfirmDialog, DialogError, EmptyState, Field, FormActions
 import { ciSchema, emailSchema, messageOf, personNameSchema, phoneSchema } from "../shared/validation"
 
 type RoleFilter = "all" | Role
-type Dialog = { kind: "create" } | { kind: "edit"; target: User } | { kind: "reset"; target: User }
-type CreateForm = { ci: string; nombres: string; apellidos: string; correo: string; telefono: string; rol: Role }
+type Dialog =
+  | { kind: "create" }
+  | { kind: "detail"; target: User }
+  | { kind: "edit"; target: User }
+  | { kind: "reset"; target: User }
+
+type DetailForm = {
+  direccion: string
+  fecha_nacimiento: string
+  titulo: string
+  especialidad: string
+  plan_estudio_id: string
+  apertura_plan_id: string
+}
+type CreateForm = {
+  ci: string
+  nombres: string
+  apellidos: string
+  correo: string
+  telefono: string
+  rol: Role
+} & DetailForm
+type EditForm = {
+  ci: string
+  nombres: string
+  apellidos: string
+  telefono: string
+} & DetailForm
+
+const emptyDetail: DetailForm = {
+  direccion: "",
+  fecha_nacimiento: "",
+  titulo: "",
+  especialidad: "",
+  plan_estudio_id: "",
+  apertura_plan_id: "",
+}
+const optional = (value: string) => value.trim() || undefined
 
 const FILTERS: { id: RoleFilter; label: string }[] = [
   { id: "all", label: "Todos" }, { id: "ADMINISTRADOR", label: "Administradores" }, { id: "DOCENTE", label: "Docentes" }, { id: "ESTUDIANTE", label: "Estudiantes" },
@@ -22,6 +58,7 @@ const fullName = (target: User) => `${target.nombres} ${target.apellidos}`
 export function AdminUsersPage() {
   const { user } = useAuth()
   const [users, setUsers] = useState<User[]>([])
+  const [plans, setPlans] = useState<StudyPlan[]>([])
   const [temporaryPassword, setTemporaryPassword] = useState("")
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [dialogError, setDialogError] = useState("")
@@ -32,8 +69,14 @@ export function AdminUsersPage() {
   const [filter, setFilter] = useState<RoleFilter>("all")
   const [query, setQuery] = useState("")
 
-  const reload = () => api.listUsers().then(setUsers)
-  useEffect(() => { void reload().catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false)) }, [])
+  const reload = () => api.listUsers(query).then(setUsers)
+  useEffect(() => {
+    void api.listPlans().then((items) => setPlans(items.filter((item) => item.estado !== "INACTIVO"))).catch(() => setPlans([]))
+  }, [])
+  useEffect(() => {
+    setLoading(true)
+    void reload().catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false))
+  }, [query])
 
   async function run(action: () => Promise<unknown>, success: string, scope: "page" | "dialog"): Promise<boolean> {
     setBusy(true); setError(""); setDialogError(""); setNotice("")
@@ -56,11 +99,41 @@ export function AdminUsersPage() {
 
   async function createUser(form: CreateForm) {
     let secret = ""
-    const ok = await run(async () => { secret = (await api.createUser({ ...form, ci: form.ci.trim().toUpperCase(), correo: form.correo.trim().toLowerCase() })).contrasena_temporal }, `Cuenta creada para ${form.nombres} ${form.apellidos}.`, "dialog")
+    const payload = {
+      ci: form.ci.trim().toUpperCase(),
+      nombres: form.nombres.trim(),
+      apellidos: form.apellidos.trim(),
+      correo: form.correo.trim().toLowerCase(),
+      telefono: form.telefono.trim(),
+      direccion: optional(form.direccion),
+      fecha_nacimiento: optional(form.fecha_nacimiento),
+      titulo: form.rol === "DOCENTE" ? optional(form.titulo) : undefined,
+      especialidad: form.rol === "DOCENTE" ? optional(form.especialidad) : undefined,
+      plan_estudio_id: form.rol === "ESTUDIANTE" ? optional(form.plan_estudio_id) : undefined,
+      apertura_plan_id: form.rol === "ESTUDIANTE" ? optional(form.apertura_plan_id) : undefined,
+      rol: form.rol,
+    }
+    const ok = await run(async () => { secret = (await api.createUser(payload)).contrasena_temporal }, `Cuenta creada para ${form.nombres} ${form.apellidos}.`, "dialog")
     if (ok) { closeDialog(); setTemporaryPassword(secret) }
   }
-  async function editIdentity(target: User, data: { nombres: string; apellidos: string; ci: string; telefono: string }) {
-    if (await run(() => api.updateUser(target.id, data), `Datos de ${data.nombres} ${data.apellidos} corregidos.`, "dialog")) closeDialog()
+  async function editUser(target: User, form: EditForm) {
+    const data: UserUpdateInput = {
+      ci: form.ci.trim().toUpperCase(),
+      nombres: form.nombres.trim(),
+      apellidos: form.apellidos.trim(),
+      telefono: form.telefono.trim(),
+    }
+    if (optional(form.direccion)) data.direccion = optional(form.direccion)
+    if (optional(form.fecha_nacimiento)) data.fecha_nacimiento = optional(form.fecha_nacimiento)
+    if (target.rol === "DOCENTE") {
+      if (optional(form.titulo)) data.titulo = optional(form.titulo)
+      if (optional(form.especialidad)) data.especialidad = optional(form.especialidad)
+    }
+    if (target.rol === "ESTUDIANTE") {
+      if (optional(form.plan_estudio_id)) data.plan_estudio_id = optional(form.plan_estudio_id)
+      if (optional(form.apertura_plan_id)) data.apertura_plan_id = optional(form.apertura_plan_id)
+    }
+    if (await run(() => api.updateUser(target.id, data), `Datos de ${form.nombres} ${form.apellidos} corregidos.`, "dialog")) closeDialog()
   }
   async function resetPassword(target: User) {
     let secret = ""
@@ -79,10 +152,7 @@ export function AdminUsersPage() {
     DOCENTE: users.filter((item) => item.rol === "DOCENTE").length,
     ESTUDIANTE: users.filter((item) => item.rol === "ESTUDIANTE").length,
   }
-  const needle = query.trim().toLowerCase()
-  const visible = users.filter((item) =>
-    (filter === "all" || item.rol === filter) &&
-    (!needle || `${item.nombres} ${item.apellidos} ${item.ci} ${item.correo}`.toLowerCase().includes(needle)))
+  const visible = users.filter((item) => filter === "all" || item.rol === filter)
 
   if (loading) return <AppShell><PageLoading>Cargando usuarios…</PageLoading></AppShell>
 
@@ -113,8 +183,8 @@ export function AdminUsersPage() {
             ))}
           </div>
           <div className="ui-field us-search">
-            <label htmlFor="user-search">Buscar por nombre, CI o correo</label>
-            <input id="user-search" type="search" className="ui-input" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <label htmlFor="user-search">Buscar por nombre, CI, correo, carrera, plan, grupo o datos profesionales</label>
+            <input id="user-search" type="search" className="ui-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ej. Psicología, plan PSI, Magíster, Av. Banzer" />
           </div>
         </div>
 
@@ -142,6 +212,7 @@ export function AdminUsersPage() {
                         <span className="us-protected"><Icon name="shield" size={16} />Cuenta protegida</span>
                       ) : (
                         <div className="ui-row-actions">
+                          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" aria-label={`Ver detalle de ${fullName(item)}`} onClick={() => openDialog({ kind: "detail", target: item })}><ButtonLabel icon="eye">Ver detalle</ButtonLabel></button>
                           <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" aria-label={`Corregir datos de ${fullName(item)}`} onClick={() => openDialog({ kind: "edit", target: item })}><ButtonLabel icon="edit">Corregir datos</ButtonLabel></button>
                           {item.activo
                             ? <button type="button" className="ui-btn ui-btn-warning ui-btn-sm" disabled={busy} aria-label={`Inactivar a ${fullName(item)}`} onClick={() => void toggleActive(item)}><ButtonLabel icon="pause">Inactivar</ButtonLabel></button>
@@ -158,8 +229,9 @@ export function AdminUsersPage() {
         )}
       </section>
 
-      {dialog?.kind === "create" && <CreateUserDialog canCreateAdmin={Boolean(user?.es_administrador_principal)} busy={busy} error={dialogError} onClose={closeDialog} onSubmit={(form) => void createUser(form)} />}
-      {dialog?.kind === "edit" && <EditIdentityDialog target={dialog.target} busy={busy} error={dialogError} onClose={closeDialog} onSubmit={(data) => void editIdentity(dialog.target, data)} />}
+      {dialog?.kind === "create" && <CreateUserDialog canCreateAdmin={Boolean(user?.es_administrador_principal)} plans={plans} busy={busy} error={dialogError} onClose={closeDialog} onSubmit={(form) => void createUser(form)} />}
+      {dialog?.kind === "detail" && <UserDetailDialog target={dialog.target} onClose={closeDialog} />}
+      {dialog?.kind === "edit" && <EditUserDialog target={dialog.target} plans={plans} busy={busy} error={dialogError} onClose={closeDialog} onSubmit={(form) => void editUser(dialog.target, form)} />}
       {dialog?.kind === "reset" && (
         <ConfirmDialog
           danger={false}
@@ -177,8 +249,70 @@ export function AdminUsersPage() {
   )
 }
 
-function CreateUserDialog({ canCreateAdmin, busy, error, onClose, onSubmit }: { canCreateAdmin: boolean; busy: boolean; error: string; onClose: () => void; onSubmit: (form: CreateForm) => void }) {
-  const [form, setForm] = useState<CreateForm>({ ci: "", nombres: "", apellidos: "", correo: "", telefono: "", rol: "DOCENTE" })
+function DetailFields({ prefix, rol, form, plans, onChange }: {
+  prefix: string
+  rol: Role
+  form: DetailForm
+  plans: StudyPlan[]
+  onChange: (patch: Partial<DetailForm>) => void
+}) {
+  const [openings, setOpenings] = useState<PlanOpening[]>([])
+  useEffect(() => {
+    if (rol !== "ESTUDIANTE" || !form.plan_estudio_id) { setOpenings([]); return }
+    let active = true
+    void api.listPlanOpenings(form.plan_estudio_id).then((items) => { if (active) setOpenings(items) }).catch(() => { if (active) setOpenings([]) })
+    return () => { active = false }
+  }, [rol, form.plan_estudio_id])
+
+  return (
+    <>
+      <div className="ap-form-row">
+        <Field id={`${prefix}-address`} label="Dirección" hint="Opcional, hasta 200 caracteres.">
+          <input id={`${prefix}-address`} className="ui-input" value={form.direccion} onChange={(event) => onChange({ direccion: event.target.value })} maxLength={200} autoComplete="street-address" />
+        </Field>
+        <Field id={`${prefix}-birth`} label="Fecha de nacimiento" hint="Opcional.">
+          <input id={`${prefix}-birth`} className="ui-input" type="date" value={form.fecha_nacimiento} onChange={(event) => onChange({ fecha_nacimiento: event.target.value })} />
+        </Field>
+      </div>
+      {rol === "DOCENTE" && (
+        <div className="ap-form-row">
+          <Field id={`${prefix}-title`} label="Título" hint="Opcional, hasta 120 caracteres.">
+            <input id={`${prefix}-title`} className="ui-input" value={form.titulo} onChange={(event) => onChange({ titulo: event.target.value })} maxLength={120} />
+          </Field>
+          <Field id={`${prefix}-specialty`} label="Especialidad" hint="Opcional, hasta 120 caracteres.">
+            <input id={`${prefix}-specialty`} className="ui-input" value={form.especialidad} onChange={(event) => onChange({ especialidad: event.target.value })} maxLength={120} />
+          </Field>
+        </div>
+      )}
+      {rol === "ESTUDIANTE" && (
+        <>
+          <Field id={`${prefix}-plan`} label="Carrera y plan" hint="Opcional. Solo planes vigentes o en borrador.">
+            <select id={`${prefix}-plan`} className="ui-select" value={form.plan_estudio_id} onChange={(event) => onChange({ plan_estudio_id: event.target.value, apertura_plan_id: "" })}>
+              <option value="">Sin asignar</option>
+              {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.carrera_nombre} — {plan.codigo} ({plan.modalidad})</option>)}
+            </select>
+          </Field>
+          <Field id={`${prefix}-opening`} label="Grupo de ingreso" hint="Opcional. Debe pertenecer al plan elegido.">
+            <select id={`${prefix}-opening`} className="ui-select" value={form.apertura_plan_id} disabled={!form.plan_estudio_id || openings.length === 0} onChange={(event) => onChange({ apertura_plan_id: event.target.value })}>
+              <option value="">Sin grupo</option>
+              {openings.map((opening) => <option key={opening.id} value={opening.id}>{opening.codigo} · {opening.periodo_denominacion}</option>)}
+            </select>
+          </Field>
+        </>
+      )}
+    </>
+  )
+}
+
+function CreateUserDialog({ canCreateAdmin, plans, busy, error, onClose, onSubmit }: {
+  canCreateAdmin: boolean
+  plans: StudyPlan[]
+  busy: boolean
+  error: string
+  onClose: () => void
+  onSubmit: (form: CreateForm) => void
+}) {
+  const [form, setForm] = useState<CreateForm>({ ci: "", nombres: "", apellidos: "", correo: "", telefono: "", rol: "DOCENTE", ...emptyDetail })
   const [errors, setErrors] = useState<Record<string, string | null>>({})
   const set = (patch: Partial<CreateForm>) => setForm((current) => ({ ...current, ...patch }))
   const change = (key: keyof CreateForm, value: string) => { set({ [key]: value } as Partial<CreateForm>); setErrors((current) => ({ ...current, [key]: null })) }
@@ -197,7 +331,7 @@ function CreateUserDialog({ canCreateAdmin, busy, error, onClose, onSubmit }: { 
   }
   const describe = (key: string) => (errors[key] ? `user-${key}-error` : undefined)
   return (
-    <Modal title="Nuevo usuario" description="Se generará una contraseña temporal que verás una sola vez. Todos los campos son obligatorios." onClose={onClose} locked={busy}>
+    <Modal title="Nuevo usuario" description="Se generará una contraseña temporal que verás una sola vez. Identidad y teléfono son obligatorios; los demás datos puedes completarlos después." onClose={onClose} locked={busy}>
       <form noValidate onSubmit={submit}>
         <DialogError error={error} />
         <Field id="user-role" label="Rol">
@@ -215,35 +349,100 @@ function CreateUserDialog({ canCreateAdmin, busy, error, onClose, onSubmit }: { 
           <Field id="user-surnames" label="Apellidos" error={errors.apellidos}><input id="user-surnames" className="ui-input" value={form.apellidos} onChange={(event) => change("apellidos", event.target.value)} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.apellidos)} aria-describedby={errors.apellidos ? "user-surnames-error" : undefined} /></Field>
         </div>
         <Field id="user-mail" label="Correo" error={errors.correo}><input id="user-mail" className="ui-input" type="email" value={form.correo} onChange={(event) => change("correo", event.target.value)} maxLength={254} required autoComplete="off" aria-invalid={Boolean(errors.correo)} aria-describedby={errors.correo ? "user-mail-error" : undefined} /></Field>
+        <DetailFields prefix="user" rol={form.rol} form={form} plans={plans} onChange={set} />
         <FormActions busy={busy} onClose={onClose} submitLabel="Crear cuenta" icon="check" />
       </form>
     </Modal>
   )
 }
 
-function EditIdentityDialog({ target, busy, error, onClose, onSubmit }: { target: User; busy: boolean; error: string; onClose: () => void; onSubmit: (data: { nombres: string; apellidos: string; ci: string; telefono: string }) => void }) {
-  const [nombres, setNombres] = useState(target.nombres)
-  const [apellidos, setApellidos] = useState(target.apellidos)
-  const [ci, setCi] = useState(target.ci)
-  const [telefono, setTelefono] = useState(target.telefono)
+function EditUserDialog({ target, plans, busy, error, onClose, onSubmit }: {
+  target: User
+  plans: StudyPlan[]
+  busy: boolean
+  error: string
+  onClose: () => void
+  onSubmit: (form: EditForm) => void
+}) {
+  const [form, setForm] = useState<EditForm>({
+    ...emptyDetail,
+    nombres: target.nombres,
+    apellidos: target.apellidos,
+    ci: target.ci,
+    telefono: target.telefono,
+    direccion: target.direccion ?? "",
+    fecha_nacimiento: target.fecha_nacimiento ?? "",
+    titulo: target.titulo ?? "",
+    especialidad: target.especialidad ?? "",
+    plan_estudio_id: target.plan_estudio_id ?? "",
+    apertura_plan_id: target.apertura_plan_id ?? "",
+  })
   const [errors, setErrors] = useState<Record<string, string | null>>({})
+  const set = (patch: Partial<EditForm>) => setForm((current) => ({ ...current, ...patch }))
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const next = { nombres: messageOf(personNameSchema, nombres), apellidos: messageOf(personNameSchema, apellidos), ci: messageOf(ciSchema, ci), telefono: messageOf(phoneSchema, telefono) }
+    const next = {
+      nombres: messageOf(personNameSchema, form.nombres),
+      apellidos: messageOf(personNameSchema, form.apellidos),
+      ci: messageOf(ciSchema, form.ci),
+      telefono: messageOf(phoneSchema, form.telefono),
+    }
     setErrors(next)
     if (Object.values(next).some(Boolean)) return
-    onSubmit({ nombres: nombres.trim(), apellidos: apellidos.trim(), ci: ci.trim().toUpperCase(), telefono: telefono.trim() })
+    onSubmit(form)
   }
   return (
-    <Modal title={`Corregir datos de ${fullName(target)}`} description="Usa esta opción solo para corregir errores de digitación. No cambia el correo ni el rol." onClose={onClose} locked={busy}>
+    <Modal title={`Corregir datos de ${fullName(target)}`} description="No cambia el correo ni el rol. Si el estudiante ya tiene inscripciones, el plan y el grupo se corrigen desde Planes de estudio." onClose={onClose} locked={busy}>
       <form noValidate onSubmit={submit}>
         <DialogError error={error} />
-        <Field id="edit-names" label="Nombres" error={errors.nombres}><input id="edit-names" className="ui-input" value={nombres} onChange={(event) => { setNombres(event.target.value); setErrors((current) => ({ ...current, nombres: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.nombres)} aria-describedby={errors.nombres ? "edit-names-error" : undefined} data-autofocus="" /></Field>
-        <Field id="edit-surnames" label="Apellidos" error={errors.apellidos}><input id="edit-surnames" className="ui-input" value={apellidos} onChange={(event) => { setApellidos(event.target.value); setErrors((current) => ({ ...current, apellidos: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.apellidos)} aria-describedby={errors.apellidos ? "edit-surnames-error" : undefined} /></Field>
-        <Field id="edit-ci" label="CI" error={errors.ci}><input id="edit-ci" className="ui-input" value={ci} onChange={(event) => { setCi(event.target.value); setErrors((current) => ({ ...current, ci: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.ci)} aria-describedby={errors.ci ? "edit-ci-error" : undefined} /></Field>
-        <Field id="edit-phone" label="Teléfono" error={errors.telefono}><input id="edit-phone" className="ui-input" value={telefono} onChange={(event) => { setTelefono(event.target.value); setErrors((current) => ({ ...current, telefono: null })) }} maxLength={40} required autoComplete="tel" aria-invalid={Boolean(errors.telefono)} aria-describedby={errors.telefono ? "edit-phone-error" : undefined} /></Field>
+        <div className="ap-form-row">
+          <Field id="edit-names" label="Nombres" error={errors.nombres}><input id="edit-names" className="ui-input" value={form.nombres} onChange={(event) => { set({ nombres: event.target.value }); setErrors((current) => ({ ...current, nombres: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.nombres)} aria-describedby={errors.nombres ? "edit-names-error" : undefined} data-autofocus="" /></Field>
+          <Field id="edit-surnames" label="Apellidos" error={errors.apellidos}><input id="edit-surnames" className="ui-input" value={form.apellidos} onChange={(event) => { set({ apellidos: event.target.value }); setErrors((current) => ({ ...current, apellidos: null })) }} maxLength={120} required autoComplete="off" aria-invalid={Boolean(errors.apellidos)} aria-describedby={errors.apellidos ? "edit-surnames-error" : undefined} /></Field>
+        </div>
+        <div className="ap-form-row">
+          <Field id="edit-ci" label="CI" error={errors.ci}><input id="edit-ci" className="ui-input" value={form.ci} onChange={(event) => { set({ ci: event.target.value }); setErrors((current) => ({ ...current, ci: null })) }} maxLength={32} required autoComplete="off" aria-invalid={Boolean(errors.ci)} aria-describedby={errors.ci ? "edit-ci-error" : undefined} /></Field>
+          <Field id="edit-phone" label="Teléfono" error={errors.telefono}><input id="edit-phone" className="ui-input" value={form.telefono} onChange={(event) => { set({ telefono: event.target.value }); setErrors((current) => ({ ...current, telefono: null })) }} maxLength={40} required autoComplete="tel" aria-invalid={Boolean(errors.telefono)} aria-describedby={errors.telefono ? "edit-phone-error" : undefined} /></Field>
+        </div>
+        <DetailFields prefix="edit" rol={target.rol} form={form} plans={plans} onChange={set} />
         <FormActions busy={busy} onClose={onClose} submitLabel="Guardar cambios" icon="check" />
       </form>
+    </Modal>
+  )
+}
+
+function UserDetailDialog({ target, onClose }: { target: User; onClose: () => void }) {
+  const rows: { label: string; value: string | null }[] = [
+    { label: "CI", value: target.ci },
+    { label: "Correo", value: target.correo },
+    { label: "Teléfono", value: target.telefono },
+    { label: "Dirección", value: target.direccion },
+    { label: "Fecha de nacimiento", value: target.fecha_nacimiento },
+    { label: "Rol", value: target.rol },
+    { label: "Estado de la cuenta", value: target.activo ? "Activa" : "Inactiva" },
+    { label: "Debe cambiar contraseña", value: target.debe_cambiar_contrasena ? "Sí" : "No" },
+  ]
+  if (target.rol === "DOCENTE") {
+    rows.push({ label: "Título", value: target.titulo })
+    rows.push({ label: "Especialidad", value: target.especialidad })
+  }
+  if (target.rol === "ESTUDIANTE") {
+    rows.push({ label: "Carrera", value: target.carrera_nombre })
+    rows.push({ label: "Plan", value: target.plan_codigo })
+    rows.push({ label: "Grupo de ingreso", value: target.apertura_codigo })
+  }
+  return (
+    <Modal title={`Detalle de ${fullName(target)}`} description="Datos registrados para este usuario. Usa «Corregir datos» para editarlos." onClose={onClose}>
+      <dl className="pf-details">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.value || "No registrado"}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="ui-modal-actions">
+        <button type="button" className="ui-btn ui-btn-primary" onClick={onClose} data-autofocus=""><ButtonLabel icon="check">Cerrar</ButtonLabel></button>
+      </div>
     </Modal>
   )
 }

@@ -145,6 +145,12 @@ otra versión del plan es una operación distinta.
   correcciones permitidas las realiza un Administrador desde gestión de usuarios.
   El Administrador puede actualizar su propio teléfono. El cambio de contraseña
   sigue disponible para los tres roles.
+- La ficha de usuario incluye dirección y fecha de nacimiento; título y
+  especialidad solo para Docentes; carrera, plan y grupo de ingreso solo para
+  Estudiantes. Administración busca y consulta el detalle de esas fichas. El
+  backend valida los campos por rol, la correspondencia plan/grupo y la
+  conservación del historial de inscripciones. Esta ampliación no permite
+  edición propia ni cambia los permisos existentes.
 
 ## Fases de desarrollo
 
@@ -224,8 +230,8 @@ cp .env.example .env
 docker compose up -d db
 cd backend
 uv sync --all-groups
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8100
+uv run python -m alembic upgrade head
+uv run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8100
 ```
 
 En otra terminal:
@@ -617,3 +623,21 @@ uv run ruff check app migrations
   asignaciones con una materia elegida. Se verificó en navegador el conteo,
   el filtro B (seis materias) y la grilla sin desborde de página. Seis pruebas
   frontend y compilación TypeScript/Vite aprobaron.
+- **Arranque Windows corregido (25-11-2026):** el equipo local bloqueó con
+  AppLocker los ejecutables `alembic.exe` y `uvicorn.exe` creados por uv
+  (`Failed to spawn`, error 4551). Los scripts `dev-windows.ps1` y
+  `principal-windows.ps1`, el Makefile y los comandos documentados ahora
+  invocan los módulos con `uv run python -m ...`. Verificación real: se
+  aplicaron las migraciones pendientes `0009` a `0014` en PostgreSQL local;
+  API `/docs` y frontend `/` respondieron 200 con el nuevo arranque.
+- **Fichas ampliadas, búsqueda y detalle (26-11-2026):** se implementaron
+  dirección y fecha de nacimiento para todas las cuentas, título y especialidad
+  para docentes y carrera/plan/grupo de ingreso para estudiantes. La API busca
+  por esos campos, devuelve la ficha en la respuesta de usuarios y valida en
+  servidor los campos por rol, plan activo, carrera/facultad activas,
+  pertenencia del grupo al plan y conservación del historial. La interfaz
+  administra los campos en alta/corrección, muestra el detalle y amplía el
+  perfil de solo lectura. Migración `0015_user_profile_details` aplicada en
+  PostgreSQL local; `alembic check` sin cambios pendientes. Verificación:
+  45 pruebas backend, Ruff y compilación TypeScript/Vite aprobados. Falta
+  revisión visual autenticada del nuevo flujo.

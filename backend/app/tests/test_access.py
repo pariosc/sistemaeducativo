@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -319,6 +321,254 @@ async def test_admin_can_correct_user_identity_without_duplicate_ci(client, orig
         headers=origin_headers,
     )
     assert duplicate_ci.status_code == 409
+
+
+async def test_profile_details_are_saved_and_searchable(client, origin_headers):
+    await sign_in(client)
+    teacher = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9001001",
+            "nombres": "Rosa",
+            "apellidos": "Méndez",
+            "correo": "rosa.detail@example.edu",
+            "telefono": "70001001",
+            "rol": "DOCENTE",
+            "direccion": "Av. Banzer 123",
+            "fecha_nacimiento": "1982-03-14",
+            "titulo": "Magíster",
+            "especialidad": "Psicología clínica",
+        },
+        headers=origin_headers,
+    )
+    assert teacher.status_code == 201
+    teacher_id = teacher.json()["id"]
+    assert teacher.json()["direccion"] == "Av. Banzer 123"
+    assert teacher.json()["fecha_nacimiento"] == "1982-03-14"
+    assert teacher.json()["titulo"] == "Magíster"
+    assert teacher.json()["especialidad"] == "Psicología clínica"
+
+    student = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9001002",
+            "nombres": "Lucía",
+            "apellidos": "Pérez",
+            "correo": "lucia.detail@example.edu",
+            "telefono": "70001002",
+            "rol": "ESTUDIANTE",
+            "direccion": "Calle Sucre 45",
+            "fecha_nacimiento": "2004-09-02",
+        },
+        headers=origin_headers,
+    )
+    assert student.status_code == 201
+    student_id = student.json()["id"]
+    assert student.json()["direccion"] == "Calle Sucre 45"
+    assert student.json()["fecha_nacimiento"] == "2004-09-02"
+
+    for term, expected in (
+        ("Magíster", teacher_id),
+        ("Av. Banzer", teacher_id),
+        ("Psicología clínica", teacher_id),
+        ("Calle Sucre", student_id),
+    ):
+        found = await client.get(
+            "/api/v1/admin/users", params={"q": term}, headers=origin_headers
+        )
+        assert found.status_code == 200
+        assert [item["id"] for item in found.json()] == [expected]
+
+    corrected = await client.patch(
+        f"/api/v1/admin/users/{teacher_id}",
+        json={"direccion": "Av. Ballivián 88", "titulo": "Doctorado"},
+        headers=origin_headers,
+    )
+    assert corrected.status_code == 200
+    assert corrected.json()["direccion"] == "Av. Ballivián 88"
+    assert corrected.json()["titulo"] == "Doctorado"
+
+
+async def test_role_specific_fields_are_rejected_and_null_updates_are_invalid(
+    client, origin_headers
+):
+    await sign_in(client)
+    student = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9002001",
+            "nombres": "Sofía",
+            "apellidos": "Núñez",
+            "correo": "sofia.detail@example.edu",
+            "telefono": "70002001",
+            "rol": "ESTUDIANTE",
+            "titulo": "Magíster",
+        },
+        headers=origin_headers,
+    )
+    assert student.status_code == 400
+    assert "Título y especialidad solo aplican a docentes" in student.text
+
+    teacher = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9002002",
+            "nombres": "Pedro",
+            "apellidos": "García",
+            "correo": "pedro.detail@example.edu",
+            "telefono": "70002002",
+            "rol": "DOCENTE",
+            "plan_estudio_id": str(uuid.uuid4()),
+        },
+        headers=origin_headers,
+    )
+    assert teacher.status_code == 400
+    assert "Plan y grupo de ingreso solo aplican a estudiantes" in teacher.text
+
+    valid = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9002003",
+            "nombres": "Ana",
+            "apellidos": "Rojas",
+            "correo": "ana.detail@example.edu",
+            "telefono": "70002003",
+            "rol": "DOCENTE",
+            "titulo": "Licenciatura",
+        },
+        headers=origin_headers,
+    )
+    assert valid.status_code == 201
+    null_update = await client.patch(
+        f"/api/v1/admin/users/{valid.json()['id']}",
+        json={"direccion": None},
+        headers=origin_headers,
+    )
+    assert null_update.status_code == 422
+
+
+async def test_student_plan_and_group_are_validated_and_searchable(client, origin_headers):
+    await sign_in(client)
+
+    async def post(path, payload):
+        response = await client.post(path, json=payload, headers=origin_headers)
+        assert response.status_code in (200, 201), response.text
+        return response.json()
+
+    faculty = await post("/api/v1/admin/faculties", {"codigo": "DET", "nombre": "Facultad Detalle"})
+    career = await post(
+        "/api/v1/admin/careers",
+        {"codigo": "DET", "nombre": "Carrera Detalle", "facultad_id": faculty["id"]},
+    )
+    plan = await post(
+        "/api/v1/admin/plans",
+        {"carrera_id": career["id"], "codigo": "DET-2027", "modalidad": "SEMESTRAL"},
+    )
+    unit = await post(
+        f"/api/v1/admin/plans/{plan['id']}/units",
+        {"numero": 1, "nombre": "Semestre 1"},
+    )
+    subject = await post("/api/v1/admin/subjects", {"codigo": "DET1", "nombre": "Materia Detalle"})
+    await post(
+        f"/api/v1/admin/plans/{plan['id']}/subjects",
+        {"materia_id": subject["id"], "unidad_id": unit["id"]},
+    )
+    published = await client.patch(
+        f"/api/v1/admin/plans/{plan['id']}",
+        json={"estado": "VIGENTE"},
+        headers=origin_headers,
+    )
+    assert published.status_code == 200
+    period = await post(
+        "/api/v1/admin/periods",
+        {
+            "denominacion": "Detalle 2027-1",
+            "fecha_inicio": "2027-01-01",
+            "fecha_fin": "2027-06-30",
+        },
+    )
+    await post(f"/api/v1/admin/periods/{period['id']}/careers", {"carrera_id": career["id"]})
+    await post(f"/api/v1/admin/periods/{period['id']}/plans", {"plan_id": plan["id"]})
+    opening = await post(
+        f"/api/v1/admin/periods/{period['id']}/openings", {"plan_id": plan["id"]}
+    )
+
+    student = await post(
+        "/api/v1/admin/users",
+        {
+            "ci": "9003001",
+            "nombres": "Carlos",
+            "apellidos": "Estudiante",
+            "correo": "carlos.detail@example.edu",
+            "telefono": "70003001",
+            "rol": "ESTUDIANTE",
+            "plan_estudio_id": plan["id"],
+            "apertura_plan_id": opening["id"],
+        },
+    )
+    assert student["plan_estudio_id"] == plan["id"]
+    assert student["apertura_plan_id"] == opening["id"]
+    assert student["plan_codigo"] == "DET-2027"
+    assert student["carrera_nombre"] == "Carrera Detalle"
+    assert student["apertura_codigo"] == opening["codigo"]
+
+    for term in ("DET-2027", "Carrera Detalle", opening["codigo"]):
+        found = await client.get(
+            "/api/v1/admin/users", params={"q": term}, headers=origin_headers
+        )
+        assert [item["id"] for item in found.json()] == [student["id"]]
+
+    missing_plan = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9003002",
+            "nombres": "Sin",
+            "apellidos": "Plan",
+            "correo": "sin.plan@example.edu",
+            "telefono": "70003002",
+            "rol": "ESTUDIANTE",
+            "apertura_plan_id": opening["id"],
+        },
+        headers=origin_headers,
+    )
+    assert missing_plan.status_code == 400
+    assert "Debe seleccionar un plan para el grupo" in missing_plan.text
+
+    unknown_plan = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9003003",
+            "nombres": "Plan",
+            "apellidos": "Inexistente",
+            "correo": "plan.inexistente@example.edu",
+            "telefono": "70003003",
+            "rol": "ESTUDIANTE",
+            "plan_estudio_id": str(uuid.uuid4()),
+        },
+        headers=origin_headers,
+    )
+    assert unknown_plan.status_code == 404
+
+    another_plan = await post(
+        "/api/v1/admin/plans",
+        {"carrera_id": career["id"], "codigo": "DET-2027B", "modalidad": "SEMESTRAL"},
+    )
+    mismatch = await client.post(
+        "/api/v1/admin/users",
+        json={
+            "ci": "9003004",
+            "nombres": "Grupo",
+            "apellidos": "Ajeno",
+            "correo": "grupo.ajeno@example.edu",
+            "telefono": "70003004",
+            "rol": "ESTUDIANTE",
+            "plan_estudio_id": another_plan["id"],
+            "apertura_plan_id": opening["id"],
+        },
+        headers=origin_headers,
+    )
+    assert mismatch.status_code == 409
+    assert "El grupo no pertenece al plan seleccionado" in mismatch.text
 
 
 async def test_wrong_origin_is_rejected(client):

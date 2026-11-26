@@ -1,5 +1,27 @@
 # Cambios para reflejar en el informe
 
+## Fichas ampliadas, búsqueda y detalle — 26-11-2026
+
+- Decisión funcional confirmada por el usuario: dirección y fecha de nacimiento
+  para todas las cuentas, título y especialidad para Docentes y carrera, plan y
+  grupo de ingreso para Estudiantes. No se crearon RF nuevos ni se modificaron
+  los permisos.
+- `GET /api/v1/admin/users` acepta `q` y busca en servidor por identidad,
+  dirección, datos profesionales, carrera, plan y grupo. La lista ofrece «Ver
+  detalle»; alta y corrección incluyen los campos según el rol.
+- El backend rechaza título/especialidad fuera de Docentes y plan/grupo fuera de
+  Estudiantes. Valida plan no inactivo, carrera y facultad activas, pertenencia
+  del grupo al plan y conservación del historial de inscripciones. Docentes y
+  Estudiantes siguen sin editar su perfil; el Administrador mantiene solo la
+  edición de su teléfono.
+- La migración `0015_user_profile_details` agrega cuatro columnas opcionales y
+  se aplicó en PostgreSQL local. `alembic check` no detectó cambios pendientes.
+- Verificación ejecutada: 45 pruebas backend en SQLite, Ruff y compilación
+  TypeScript/Vite aprobados. Falta la revisión visual autenticada del flujo en
+  la interfaz.
+- **Secciones del informe a revisar:** gestión de usuarios, P03 P14, HU05 y
+  capturas de búsqueda, detalle y perfil por rol.
+
 ## Actualización del informe y diagramas — 25-11-2026
 
 - Se actualizó el documento de Google Docs con el estado real de la
@@ -99,7 +121,7 @@ reglas de validación de credenciales y capturas del formulario de cambio.
 
 ## Pendiente de actualización/verificación
 
-- Aplicar `uv run alembic upgrade head` en las demás bases de datos al
+- Aplicar `uv run python -m alembic upgrade head` en las demás bases de datos al
   desplegar, para activar la regla sobre las cuentas existentes en esos
   entornos.
 - Verificar el flujo con cuentas de los tres roles y actualizar las evidencias

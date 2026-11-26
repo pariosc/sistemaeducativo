@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
@@ -22,6 +23,47 @@ from app.modules.access.models.user import (
 )
 from app.modules.access.repositories.user_repository import UserRepository
 from app.modules.access.schemas.user import UserCreate, UserUpdate
+from app.modules.curriculum.models.entities import EstadoPlan, PlanEstudio
+from app.modules.enrollments.models.entities import Inscripcion
+from app.modules.periods.models.entities import AperturaPlan
+
+
+def _ensure_role_specific_fields(payload: UserCreate | UserUpdate, role: UserRole) -> None:
+    data = payload.model_dump(exclude_unset=True)
+    if role != UserRole.DOCENTE and ("titulo" in data or "especialidad" in data):
+        raise HTTPException(status_code=400, detail="Título y especialidad solo aplican a docentes")
+    if role != UserRole.ESTUDIANTE and (
+        "plan_estudio_id" in data or "apertura_plan_id" in data
+    ):
+        raise HTTPException(
+            status_code=400, detail="Plan y grupo de ingreso solo aplican a estudiantes"
+        )
+
+
+def _validate_student_assignment(
+    db: Session, plan_id: uuid.UUID | None, opening_id: uuid.UUID | None
+) -> tuple[PlanEstudio | None, AperturaPlan | None]:
+    if opening_id and not plan_id:
+        raise HTTPException(status_code=400, detail="Debe seleccionar un plan para el grupo")
+    plan = db.get(PlanEstudio, plan_id) if plan_id else None
+    if plan_id and not plan:
+        raise HTTPException(status_code=404, detail="Plan de estudio no encontrado")
+    opening = db.get(AperturaPlan, opening_id) if opening_id else None
+    if opening_id and not opening:
+        raise HTTPException(status_code=404, detail="Grupo de inicio no encontrado")
+    if opening and plan and opening.plan_id != plan.id:
+        raise HTTPException(status_code=409, detail="El grupo no pertenece al plan seleccionado")
+    if plan:
+        if plan.estado == EstadoPlan.INACTIVO:
+            raise HTTPException(
+                status_code=409, detail="El plan está inactivo: no admite nuevas asignaciones"
+            )
+        if not plan.carrera.activo or not plan.carrera.facultad.activo:
+            raise HTTPException(
+                status_code=409,
+                detail="La carrera o facultad del plan está inactiva: no admite asignaciones",
+            )
+    return plan, opening
 
 
 def authenticate(db: Session, identifier: str, password: str) -> tuple[Usuario, str]:
@@ -61,6 +103,14 @@ def create_user(db: Session, payload: UserCreate) -> tuple[Usuario, str]:
     ci = payload.ci.strip().upper()
     if repository.get_by_ci_or_email(ci, email):
         raise HTTPException(status_code=409, detail="El CI o correo ya está registrado")
+    _ensure_role_specific_fields(payload, payload.rol)
+    plan, opening = (None, None)
+    if payload.rol == UserRole.ESTUDIANTE and (
+        payload.plan_estudio_id or payload.apertura_plan_id
+    ):
+        plan, opening = _validate_student_assignment(
+            db, payload.plan_estudio_id, payload.apertura_plan_id
+        )
 
     temp_password = generate_temporary_password()
     user = Usuario(
@@ -69,14 +119,21 @@ def create_user(db: Session, payload: UserCreate) -> tuple[Usuario, str]:
         apellidos=payload.apellidos,
         correo=email,
         telefono=payload.telefono,
+        direccion=payload.direccion,
+        fecha_nacimiento=payload.fecha_nacimiento,
         contrasena_hash=hash_password(temp_password),
         rol=payload.rol,
         debe_cambiar_contrasena=True,
     )
     if payload.rol == UserRole.DOCENTE:
-        user.perfil_docente = PerfilDocente()
+        user.perfil_docente = PerfilDocente(
+            titulo=payload.titulo, especialidad=payload.especialidad
+        )
     elif payload.rol == UserRole.ESTUDIANTE:
-        user.perfil_estudiante = PerfilEstudiante()
+        user.perfil_estudiante = PerfilEstudiante(
+            plan_estudio_id=plan.id if plan else None,
+            apertura_plan_id=opening.id if opening else None,
+        )
     db.add(user)
     try:
         db.commit()
@@ -89,12 +146,51 @@ def create_user(db: Session, payload: UserCreate) -> tuple[Usuario, str]:
 
 def update_user(db: Session, user: Usuario, payload: UserUpdate) -> Usuario:
     data = payload.model_dump(exclude_unset=True)
+    _ensure_role_specific_fields(payload, user.rol)
+    profile_data = {
+        key: data.pop(key)
+        for key in ("titulo", "especialidad", "plan_estudio_id", "apertura_plan_id")
+        if key in data
+    }
     if "ci" in data and data["ci"] and data["ci"] != user.ci:
         existing = db.scalar(select(Usuario.id).where(Usuario.ci == data["ci"]))
         if existing:
             raise HTTPException(status_code=409, detail="El CI ya está registrado")
     if data.get("activo") is False and user.es_administrador_principal:
         raise HTTPException(status_code=403, detail="La cuenta principal no se puede inactivar")
+
+    if profile_data:
+        if user.rol == UserRole.DOCENTE:
+            if not user.perfil_docente:
+                user.perfil_docente = PerfilDocente()
+            for key, value in profile_data.items():
+                setattr(user.perfil_docente, key, value)
+        elif user.rol == UserRole.ESTUDIANTE:
+            profile = user.perfil_estudiante
+            if not profile:
+                raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+            next_plan = profile_data.get("plan_estudio_id", profile.plan_estudio_id)
+            next_opening = profile_data.get("apertura_plan_id", profile.apertura_plan_id)
+            changing = (
+                next_plan != profile.plan_estudio_id
+                or next_opening != profile.apertura_plan_id
+            )
+            if changing:
+                enrollment = db.scalar(
+                    select(Inscripcion.id).where(Inscripcion.estudiante_id == user.id).limit(1)
+                )
+                if enrollment is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "Este estudiante ya tiene inscripciones: cambia el plan o el grupo "
+                            "desde la pantalla de Planes de estudio"
+                        ),
+                    )
+                plan, opening = _validate_student_assignment(db, next_plan, next_opening)
+                profile.plan_estudio_id = plan.id if plan else None
+                profile.apertura_plan_id = opening.id if opening else None
+
     for key, value in data.items():
         setattr(user, key, value)
     if data.get("activo") is False:
@@ -103,7 +199,7 @@ def update_user(db: Session, user: Usuario, payload: UserUpdate) -> Usuario:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="El CI ya está registrado") from exc
+        raise HTTPException(status_code=409, detail="El CI o correo ya está registrado") from exc
     db.refresh(user)
     return user
 
