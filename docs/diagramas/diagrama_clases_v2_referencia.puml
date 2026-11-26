@@ -1,0 +1,412 @@
+@startuml
+title Sistema de gestión académica - Diagrama de clases (v2)
+
+top to bottom direction
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam nodesep 55
+skinparam ranksep 75
+
+' ==================================================
+' MODULO 1: USUARIOS, PERFILES Y ACCESO
+' RF01, RF02, RF03, RF09, RF11
+' ==================================================
+
+package "1. Usuarios, perfiles y acceso" {
+
+  enum RolUsuario {
+    ADMINISTRADOR
+    DOCENTE
+    ESTUDIANTE
+  }
+
+  abstract class Usuario {
+    - id: UUID
+    - nombres: String
+    - apellidos: String
+    - ci: String
+    - correo: String
+    - telefono: String
+    - contrasenaHash: String
+    - habilitado: Boolean
+    - cambioContrasenaObligatorio: Boolean
+    --
+    + {abstract} obtenerRol(): RolUsuario
+    + validarCredenciales(clave: String): Boolean
+    + cambiarContrasena(actual: String, nueva: String): void
+    + establecerContrasenaTemporal(temporal: String): void
+    + corregirIdentidad(nombres: String, apellidos: String, ci: String): void
+    + actualizarTelefono(telefono: String): void
+    + deshabilitar(): void
+    + puedeAccederAFuncionesAcademicas(): Boolean
+  }
+
+  class Estudiante {
+    --
+    + cumplePrerrequisitos(materia: MateriaPlan): Boolean
+    + tieneMateriaInscrita(materia: Materia, periodo: PeriodoAcademico): Boolean
+    + tieneCruce(curso: Curso): Boolean
+    + asignarPlan(plan: PlanEstudio): void
+  }
+
+  class Docente {
+    --
+    + tieneCruce(curso: Curso): Boolean
+    + puedeCalificar(inscripcion: Inscripcion): Boolean
+  }
+
+  class Administrador {
+    --
+    + {method} (la gestión se delega a servicios)
+  }
+
+  class SesionAutenticacion {
+    - id: UUID
+    - fechaInicio: DateTime
+    - fechaExpiracion: DateTime
+    - revocada: Boolean
+    --
+    + estaVigente(): Boolean
+    + cerrar(): void
+  }
+}
+
+' ==================================================
+' MODULO 2: ESTRUCTURA ACADEMICA
+' RF04 (parcial)
+' ==================================================
+
+package "2. Estructura académica" {
+
+  enum ModalidadPlan {
+    MODULAR
+    SEMESTRAL
+  }
+
+  class Carrera {
+    - id: UUID
+    - codigo: String
+    - nombre: String
+    --
+    + crearPlan(modalidad: ModalidadPlan): PlanEstudio
+  }
+
+  class PlanEstudio {
+    - id: UUID
+    - modalidad: ModalidadPlan
+    --
+    + agregarUnidad(numero: Integer, nombre: String): UnidadPlan
+    + incorporarMateria(materia: Materia, unidad: UnidadPlan): MateriaPlan
+    + contieneMateria(materia: Materia): Boolean
+  }
+
+  class UnidadPlan {
+    - id: UUID
+    - numero: Integer
+    - nombre: String
+    --
+    + correspondeA(plan: PlanEstudio): Boolean
+  }
+
+  class Materia {
+    - id: UUID
+    - codigo: String
+    - nombre: String
+    --
+    + actualizar(codigo: String, nombre: String): void
+    + puedeEliminarse(): Boolean
+  }
+
+  class MateriaPlan {
+    - id: UUID
+    --
+    + establecerPrerrequisito(previa: MateriaPlan): void
+    + retirarPrerrequisito(previa: MateriaPlan): void
+    + perteneceAlMismoPlan(otra: MateriaPlan): Boolean
+    + generaCicloCon(previa: MateriaPlan): Boolean
+  }
+}
+
+' ==================================================
+' MODULO 3: CURSOS E INSCRIPCIONES
+' RF04, RF05, RF06
+' ==================================================
+
+package "3. Cursos e inscripciones" {
+
+  enum DiaSemana {
+    LUNES
+    MARTES
+    MIERCOLES
+    JUEVES
+    VIERNES
+    SABADO
+    DOMINGO
+  }
+
+  enum EstadoInscripcion {
+    ACTIVA
+    RETIRADA
+  }
+
+  class PeriodoAcademico {
+    - id: UUID
+    - denominacion: String
+    - fechaInicio: Date
+    - fechaFin: Date
+    --
+    + tieneFechasValidas(): Boolean
+    + contieneRango(inicio: Date, fin: Date): Boolean
+  }
+
+  class Curso {
+    - id: UUID
+    - grupo: String
+    - cupo: Integer
+    - fechaInicio: Date
+    - fechaFin: Date
+    - inscripcionAbierta: Boolean
+    --
+    + agregarHorario(dia: DiaSemana, inicio: Time, fin: Time): HorarioClase
+    + modificarProgramacion(docente: Docente, inicio: Date, fin: Date, horarios: List<HorarioClase>): void
+    + validarProgramacion(): Boolean
+    + abrirInscripcion(): void
+    + cerrarInscripcion(): void
+    + hayCupo(): Boolean
+    + tieneCruceCon(otro: Curso): Boolean
+    + puedeEliminarse(): Boolean
+  }
+
+  class HorarioClase {
+    - id: UUID
+    - diaSemana: DiaSemana
+    - horaInicio: Time
+    - horaFin: Time
+    - aula: String
+    --
+    + tieneHorasValidas(): Boolean
+    + superponeFranja(otro: HorarioClase): Boolean
+  }
+
+  class Inscripcion {
+    - id: UUID
+    - fechaInscripcion: DateTime
+    - estado: EstadoInscripcion
+    --
+    + retirar(): void
+    + obtenerNotaFinal(): Optional<Decimal>
+    + estaAprobada(): Boolean
+  }
+}
+
+' ==================================================
+' MODULO 4: SEGUIMIENTO ACADEMICO
+' RF07, RF10
+' ==================================================
+
+package "4. Seguimiento académico" {
+
+  enum TipoNotificacion {
+    INSCRIPCION
+    CAMBIO_HORARIO
+    CALIFICACION
+    GENERAL
+  }
+
+  class Calificacion {
+    - id: UUID
+    - notaFinal: Decimal
+    - fechaRegistro: DateTime
+    --
+    + corregir(nuevaNota: Decimal): void
+    + esAprobatoria(): Boolean
+  }
+
+  class Notificacion {
+    - id: UUID
+    - tipo: TipoNotificacion
+    - mensaje: String
+    - fechaCreacion: DateTime
+    - leida: Boolean
+    --
+    + marcarLeida(): void
+    + correspondeA(usuario: Usuario): Boolean
+  }
+}
+
+' ==================================================
+' MODULO 5: REPORTES (Patron Strategy)
+' RF12
+' ==================================================
+
+package "5. Reportes" {
+
+  enum TipoReporte {
+    MATERIAS_POR_CARRERA
+    NOTAS_POR_ALUMNO
+    NOTAS_POR_CURSO
+    HISTORIAL_ACADEMICO
+    NOTAS_TODAS_MATERIAS
+    INSCRITOS_POR_CURSO
+    MATERIAS_DEL_ALUMNO
+    MATERIAS_DEL_DOCENTE
+  }
+
+  class Reporte {
+    - tipo: TipoReporte
+    - fechaGeneracion: DateTime
+    - titulo: String
+    --
+    + obtenerFilas(): List<List<String>>
+  }
+
+  interface Exportador {
+    + exportar(reporte: Reporte): File
+  }
+
+  class ExportadorPDF
+  class ExportadorExcel
+}
+
+' ==================================================
+' MODULO 6: SERVICIOS DE APLICACION
+' Reglas de negocio que cruzan varias entidades
+' ==================================================
+
+package "6. Servicios de aplicación" {
+
+  class AuthService <<service>> {
+    + iniciarSesion(correo: String, clave: String): SesionAutenticacion
+    + cerrarSesion(sesion: SesionAutenticacion): void
+  }
+
+  class GestionUsuarioService <<service>> {
+    + registrar(datos: DatosUsuario, rol: RolUsuario): Usuario
+    + eliminar(id: UUID): void
+    + asignarRol(id: UUID, rol: RolUsuario): void
+  }
+
+  class InscripcionService <<service>> {
+    + validarInscripcion(estudiante: Estudiante, curso: Curso): Boolean
+    + inscribir(estudiante: Estudiante, curso: Curso): Inscripcion
+  }
+
+  class CalificacionService <<service>> {
+    + registrar(docente: Docente, inscripcion: Inscripcion, nota: Decimal): Calificacion
+    + corregir(docente: Docente, inscripcion: Inscripcion, nota: Decimal): void
+  }
+
+  class NotificacionService <<service>> {
+    + notificar(usuario: Usuario, tipo: TipoNotificacion, mensaje: String): Notificacion
+    + consultar(usuario: Usuario): List<Notificacion>
+  }
+
+  class ReporteService <<service>> {
+    + generar(tipo: TipoReporte, parametros: Map): Reporte
+    + exportar(reporte: Reporte, formato: Exportador): File
+  }
+}
+
+' ==================================================
+' HERENCIA Y USUARIOS
+' ==================================================
+
+Usuario <|-- Estudiante
+Usuario <|-- Docente
+Usuario <|-- Administrador
+Usuario ..> RolUsuario
+Usuario "1" -- "0..*" SesionAutenticacion : tiene
+
+' ==================================================
+' ESTRUCTURA ACADEMICA
+' ==================================================
+
+Carrera "1" -- "0..*" PlanEstudio : ofrece
+PlanEstudio "1" *-- "1..*" UnidadPlan : contiene
+UnidadPlan "1" -- "0..*" MateriaPlan : ubica
+Materia "1" -- "0..*" MateriaPlan : se incorpora como
+MateriaPlan "0..*" --> "0..*" MateriaPlan : requiere como prerrequisito
+PlanEstudio "0..1" -- "0..*" Estudiante : asignado a
+
+' ==================================================
+' CURSOS Y HORARIOS
+' ==================================================
+
+MateriaPlan "1" -- "0..*" Curso : se ofrece en
+PeriodoAcademico "1" -- "0..*" Curso : agrupa
+Docente "1" -- "0..*" Curso : imparte
+Curso "1" *-- "1..*" HorarioClase : contiene
+
+' ==================================================
+' INSCRIPCIONES Y CALIFICACIONES
+' ==================================================
+
+Estudiante "1" -- "0..*" Inscripcion : realiza
+Curso "1" -- "0..*" Inscripcion : recibe
+Inscripcion "1" -- "0..1" Calificacion : tiene
+Inscripcion ..> EstadoInscripcion
+
+' ==================================================
+' NOTIFICACIONES
+' ==================================================
+
+Usuario "1" -- "0..*" Notificacion : recibe
+Curso "0..1" -- "0..*" Notificacion : origina
+Notificacion ..> TipoNotificacion
+
+' ==================================================
+' REPORTES (Strategy)
+' ==================================================
+
+Reporte ..> TipoReporte
+Exportador <|.. ExportadorPDF
+Exportador <|.. ExportadorExcel
+
+' ==================================================
+' DEPENDENCIAS DE SERVICIOS
+' ==================================================
+
+AuthService ..> Usuario
+AuthService ..> SesionAutenticacion
+GestionUsuarioService ..> Usuario
+InscripcionService ..> Inscripcion
+InscripcionService ..> Curso
+InscripcionService ..> Estudiante
+CalificacionService ..> Calificacion
+CalificacionService ..> Docente
+NotificacionService ..> Notificacion
+ReporteService ..> Reporte
+ReporteService ..> Exportador
+
+' ==================================================
+' RESTRICCIONES
+' ==================================================
+
+note bottom of Inscripcion
+  Restricción única (estudiante, curso):
+  evita inscripción duplicada (RF05).
+  Se valida además que no haya cruce de
+  horarios (Estudiante.tieneCruce) y que
+  haya cupo (Curso.hayCupo).
+end note
+
+note right of Curso
+  Docente.tieneCruce evita que un docente
+  tenga dos cursos superpuestos.
+  Las fechas del curso deben estar dentro
+  del PeriodoAcademico.
+end note
+
+note bottom of Usuario
+  El rol se define por la subclase
+  (Estudiante, Docente, Administrador);
+  por eso ya no existe atributo "rol"
+  ni perfiles opcionales 0..1.
+  Estudiante y Docente comparten el id.
+end note
+
+@enduml

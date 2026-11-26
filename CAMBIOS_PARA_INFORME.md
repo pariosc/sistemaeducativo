@@ -1,5 +1,24 @@
 # Cambios para reflejar en el informe
 
+## Actualización del informe y diagramas — 25-11-2026
+
+- Se actualizó el documento de Google Docs con el estado real de la
+  implementación, pruebas y limitaciones. Los anexos duplicados se sustituyeron
+  por referencias a las fuentes del repositorio; la exportación bajó de 109 a
+  40 páginas.
+- El diagrama de clases v2 aportado se preserva como referencia histórica,
+  pero no representa el modelo actual. Se prepararon tres vistas del modelo de
+  implementación y se incluyeron en el informe.
+- El diagrama relacional se generó desde PostgreSQL 18 local con migración
+  `0014_group_trajectory`: 27 tablas, 140 columnas y 40 claves foráneas.
+  Se documentaron siete vistas con fuentes editables y metadatos en
+  `docs/diagramas/`.
+- Se conservaron las ocho páginas CU00–CU07 del Draw.io original y se retiraron
+  las ampliaciones fragmentadas. También se exportaron como ocho SVG y un PDF
+  vectorial de ocho páginas. Estas páginas aún no reflejan todos los
+  cambios de planificación académica y requieren revisión funcional antes de
+  presentarse como cobertura completa de ese módulo.
+
 ## Perfil en solo lectura para Docente y Estudiante
 
 - Se confirmó que Docentes y Estudiantes consultan su perfil sin poder editar
@@ -950,3 +969,23 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   se comprobó el resumen 2 paralelos/12 materias, el filtro B con seis filas,
   la grilla semanal y el botón de agenda en la cabecera. No se modificaron
   datos académicos durante esa revisión.
+
+## Informe y diagramas de presentación — 25-11-2026
+
+- Se actualizó el informe en Google Docs con el estado real del proyecto,
+  decisiones académicas y verificaciones documentadas. Se retiraron las
+  ampliaciones fragmentadas de casos de uso y se ajustó el índice. La última
+  exportación PDF debe comprobarse tras sustituir las figuras finales; el
+  objetivo es un máximo de 50 páginas.
+- El archivo de clases v2 aportado se conservó como referencia histórica. Se
+  prepararon tres vistas de clases actuales desde los modelos SQLAlchemy.
+- Se obtuvo el esquema relacional mediante lectura de PostgreSQL 18 local en
+  la migración `0014_group_trajectory`: 27 tablas, 140 columnas y 40 claves
+  foráneas. Siete vistas ERD cubren todas las tablas; las fuentes JSON no
+  contienen filas de usuarios ni secretos.
+- Se actualizó la fuente Draw.io de CU00–CU03 para reflejar facultades,
+  grupos de ingreso y programación de la oferta; CU01 ya no presenta edición
+  de teléfono por el usuario. Los ocho diagramas se exportaron completos a
+  SVG, PNG y PDF. La secuencia modular detallada se explica en el capítulo 7.
+- Los archivos editables y exportados están en `docs/diagramas/`. Son cambios
+  locales pendientes de incorporación al repositorio compartido mediante Git.

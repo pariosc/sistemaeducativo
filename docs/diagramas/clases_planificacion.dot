@@ -1,0 +1,25 @@
+digraph Planificacion {
+  graph [label="Modelo de clases · oferta y recursos", labelloc=t, fontsize=23, fontname="DejaVu Sans", rankdir=TB, splines=polyline, nodesep=0.55, ranksep=0.75, pad=0.25, bgcolor="white"];
+  node [shape=record, style="rounded,filled", color="#315a8d", fillcolor="#edf4fc", fontname="DejaVu Sans", fontsize=15, margin="0.17,0.12"];
+  edge [color="#53677f", fontname="DejaVu Sans", fontsize=12, dir=none];
+  Periodo [label="{PeriodoAcademico|fecha_inicio / fecha_fin: Date\lplantilla_modular_id: UUID?\l}"];
+  Plantilla [label="{PlantillaModular|clases_por_modulo: Integer\lminutos_por_clase: Integer\l}", fillcolor="#fff4e5", color="#a96622"];
+  Bloque [label="{BloqueHorario|turno: String\lhora_inicio / hora_fin: Time\l}", fillcolor="#fff4e5", color="#a96622"];
+  Apertura [label="{AperturaPlan|codigo: String\lplan_id: UUID\l}"];
+  MateriaPlan [label="{MateriaPlan|plan_id / materia_id: UUID\l}"];
+  Curso [label="{Curso (paralelo ofertado)|paralelo: String\lcupo: Integer\lfecha_inicio / fecha_fin: Date\ldocente_id: UUID?\linscripcion_abierta: Boolean\l}", fillcolor="#eaf7ee", color="#2d7d53"];
+  Horario [label="{HorarioClase|dia_semana: DiaSemana\lhora_inicio / hora_fin: Time\laula: String\l}"];
+  Aula [label="{Aula|codigo: String\lcapacidad: Integer?\lactiva: Boolean\l}"];
+  Feriado [label="{FeriadoPeriodo|fecha: Date\ldescripcion: String\l}"];
+  Excepcion [label="{ExcepcionHorario|fecha_original: Date\ltipo: cancelación / reprogramación\lfecha_reprogramada: Date?\l}"];
+  Periodo -> Curso [label="1  ↔  0..*"];
+  Apertura -> Curso [label="0..1  ↔  0..*"];
+  MateriaPlan -> Curso [label="1  ↔  0..*"];
+  Plantilla -> Periodo [label="0..1", color="#a96622"];
+  Plantilla -> Curso [label="0..1", color="#a96622", constraint=false];
+  Bloque -> Horario [label="plantilla de horas", style=dashed, color="#a96622", constraint=false];
+  Curso -> Horario [label="1  ↔  0..*", color="#2d7d53"];
+  Aula -> Horario [label="0..1  ↔  0..*", color="#2d7d53"];
+  Periodo -> Feriado [label="1  ↔  0..*"];
+  Curso -> Excepcion [label="1  ↔  0..*"];
+}

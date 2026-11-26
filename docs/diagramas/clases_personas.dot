@@ -1,0 +1,23 @@
+digraph Personas {
+  graph [label="Modelo de clases · usuarios y trayectoria académica", labelloc=t, fontsize=23, fontname="DejaVu Sans", rankdir=TB, splines=polyline, nodesep=0.55, ranksep=0.75, pad=0.25, bgcolor="white"];
+  node [shape=record, style="rounded,filled", color="#315a8d", fillcolor="#edf4fc", fontname="DejaVu Sans", fontsize=15, margin="0.17,0.12"];
+  edge [color="#53677f", fontname="DejaVu Sans", fontsize=12, dir=none];
+  Usuario [label="{Usuario|ci / correo: String\lrol: ADMINISTRADOR / DOCENTE / ESTUDIANTE\les_administrador_principal: Boolean\ldebe_cambiar_contrasena: Boolean\l}"];
+  Docente [label="{PerfilDocente|usuario_id: UUID\l}"];
+  Estudiante [label="{PerfilEstudiante|usuario_id: UUID\lplan_estudio_id: UUID?\lapertura_plan_id: UUID?\l}"];
+  Sesion [label="{SesionAutenticacion|token_hash: String\lfecha_expiracion: DateTime\lrevocada_en: DateTime?\l}"];
+  Curso [label="{Curso (paralelo)|docente_id: UUID?\lcupo: Integer\l}", fillcolor="#eaf7ee", color="#2d7d53"];
+  Habilitacion [label="{HabilitacionInscripcion|periodo_id: UUID\lactiva: Boolean\l}"];
+  Inscripcion [label="{Inscripcion|curso_id: UUID\lestado: ACTIVA / RETIRADA\l}"];
+  Calificacion [label="{Calificacion|nota_final: Integer [0..100]\lfecha_registro: DateTime\l}", fillcolor="#fff4e5", color="#a96622"];
+  Notificacion [label="{Notificacion|tipo: String\lmensaje: String\lleida: Boolean\l}"];
+  Usuario -> Sesion [label="1  ↔  0..*"];
+  Usuario -> Docente [label="1  ↔  0..1"];
+  Usuario -> Estudiante [label="1  ↔  0..1"];
+  Docente -> Curso [label="0..1  ↔  0..*"];
+  Estudiante -> Habilitacion [label="1  ↔  0..*"];
+  Estudiante -> Inscripcion [label="1  ↔  0..*"];
+  Curso -> Inscripcion [label="1  ↔  0..*", color="#2d7d53"];
+  Inscripcion -> Calificacion [label="1  ↔  0..1", color="#a96622"];
+  Usuario -> Notificacion [label="1  ↔  0..*"];
+}

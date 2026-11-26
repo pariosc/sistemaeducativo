@@ -1,0 +1,26 @@
+digraph Curriculo {
+  graph [label="Modelo de clases · currículo y trayectoria", labelloc=t, fontsize=23, fontname="DejaVu Sans", rankdir=TB, splines=polyline, nodesep=0.55, ranksep=0.75, pad=0.25, bgcolor="white"];
+  node [shape=record, style="rounded,filled", color="#315a8d", fillcolor="#edf4fc", fontname="DejaVu Sans", fontsize=15, margin="0.17,0.12"];
+  edge [color="#53677f", fontname="DejaVu Sans", fontsize=12, dir=none];
+  Facultad [label="{Facultad|codigo: String\lnombre: String\lactiva: Boolean\l}"];
+  Carrera [label="{Carrera|codigo: String\lnombre: String\lactiva: Boolean\l}"];
+  Plan [label="{PlanEstudio|codigo: String\lmodalidad: MODULAR / SEMESTRAL\lestado: BORRADOR / VIGENTE / INACTIVO\l}"];
+  Unidad [label="{UnidadPlan (semestre)|numero: Integer\lnombre: String\l}"];
+  MateriaPlan [label="{MateriaPlan|plan_id: UUID\lunidad_id: UUID\lmateria_id: UUID\l}"];
+  Materia [label="{Materia|codigo: String\lnombre: String\lactiva: Boolean\l}"];
+  Prerrequisito [label="{Prerrequisito|materia_plan_id: UUID\lrequisito_materia_plan_id: UUID\l}", fillcolor="#fff4e5", color="#a96622"];
+  Periodo [label="{PeriodoAcademico|denominacion: String\lfecha_inicio / fecha_fin: Date\l}"];
+  Apertura [label="{AperturaPlan (grupo de ingreso)|codigo: String\lplan_id / carrera_id: UUID\lperiodo_inicio_id: UUID\l}", fillcolor="#eaf7ee", color="#2d7d53"];
+  Semestre [label="{SemestreGrupo|numero: Integer\lperiodo_id: UUID?\l}", fillcolor="#eaf7ee", color="#2d7d53"];
+  Facultad -> Carrera [label="1  ↔  0..*"];
+  Carrera -> Plan [label="1  ↔  0..*"];
+  Plan -> Unidad [label="1  ↔  0..*"];
+  Unidad -> MateriaPlan [label="1  ↔  0..*"];
+  Materia -> MateriaPlan [label="1  ↔  0..*"];
+  MateriaPlan -> Prerrequisito [label="dependiente", color="#a96622"];
+  Prerrequisito -> MateriaPlan [label="requisito", color="#a96622", constraint=false];
+  Plan -> Apertura [label="1  ↔  0..*"];
+  Periodo -> Apertura [label="inicio", color="#2d7d53"];
+  Apertura -> Semestre [label="1  ↔  1..*", color="#2d7d53"];
+  Periodo -> Semestre [label="asignado 0..1", color="#2d7d53", constraint=false];
+}
