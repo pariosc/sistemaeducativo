@@ -213,7 +213,7 @@ export function ParallelsPage() {
     let createdId = ""
     const ok = await dialogAction(
       async () => { createdId = (await api.createCourse(data)).id },
-      `Paralelo ${data.paralelo} creado. Siguiente paso: agrega su horario para poder abrir inscripciones.`,
+      `Paralelo ${data.paralelo} creado con horario y aula. Puedes agregar más días antes de abrir inscripciones.`,
     )
     if (ok) { closeDialog(); setTab("schedule"); setSelectedId(createdId) }
   }
@@ -221,7 +221,7 @@ export function ParallelsPage() {
   function renderDialog() {
     if (!dialog) return null
     const common = { busy, error: dialogError, onClose: closeDialog }
-    if (dialog.kind === "create") return <CreateCourseDialog {...common} plans={plans.filter((plan) => planning?.plan_ids.includes(plan.id) && plan.modalidad === "SEMESTRAL")} periods={periods} defaultPeriodId={periodId} initialSubjectId={dialog.subjectId} sourceCourse={courses.find((course) => course.id === dialog.sourceCourseId)} courses={courses} teachers={teachers} onSubmit={(data) => void createCourse(data)} />
+    if (dialog.kind === "create") return <CreateCourseDialog {...common} plans={plans.filter((plan) => planning?.plan_ids.includes(plan.id) && plan.modalidad === "SEMESTRAL")} periods={periods} defaultPeriodId={periodId} initialSubjectId={dialog.subjectId} sourceCourse={courses.find((course) => course.id === dialog.sourceCourseId)} courses={courses} teachers={teachers} rooms={rooms.filter((room) => room.activa)} onSubmit={(data) => void createCourse(data)} />
     if (dialog.kind === "confirm") return <ConfirmDialog {...common} title={dialog.title} message={dialog.message} confirmLabel={dialog.confirmLabel} onConfirm={dialog.onConfirm} />
     if (!selectedCourse) return null
     const course = selectedCourse
@@ -850,7 +850,7 @@ function ExceptionsPanel({ exceptions, busy, actions }: { exceptions: ScheduleEx
 
 interface DialogBase { busy: boolean; error: string; onClose: () => void }
 
-function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId, sourceCourse, courses, teachers, busy, error, onClose, onSubmit }: DialogBase & {
+function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId, sourceCourse, courses, teachers, rooms, busy, error, onClose, onSubmit }: DialogBase & {
   plans: StudyPlan[]
   periods: AcademicPeriod[]
   defaultPeriodId: string
@@ -858,6 +858,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId,
   sourceCourse?: Course
   courses: Course[]
   teachers: User[]
+  rooms: PlanningRoom[]
   onSubmit: (data: Parameters<typeof api.createCourse>[0]) => void
 }) {
   const vigentPlans = plans.filter((plan) => plan.estado === "VIGENTE")
@@ -873,6 +874,10 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId,
   const [end, setEnd] = useState("")
   const [datesTouched, setDatesTouched] = useState(false)
   const [teacherId, setTeacherId] = useState("")
+  const [day, setDay] = useState<Weekday>(sourceCourse?.horarios[0]?.dia_semana ?? "LUNES")
+  const [hourStart, setHourStart] = useState(sourceCourse?.horarios[0]?.hora_inicio.slice(0, 5) ?? "08:00")
+  const [hourEnd, setHourEnd] = useState(sourceCourse?.horarios[0]?.hora_fin.slice(0, 5) ?? "11:00")
+  const [roomCode, setRoomCode] = useState("")
   const [errors, setErrors] = useState<Record<string, string | null>>({})
 
   if (firstSubject === "") {
@@ -893,6 +898,7 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId,
   const shownParallel = parallelTouched ? parallel : nextParallelLetter(courses, subjectId, periodId)
   const shownStart = datesTouched ? start : sourceCourse?.fecha_inicio ?? (selectedPlan?.modalidad === "MODULAR" ? "" : period?.fecha_inicio ?? "")
   const shownEnd = datesTouched ? end : sourceCourse?.fecha_fin ?? (selectedPlan?.modalidad === "MODULAR" ? "" : period?.fecha_fin ?? "")
+  const roomIssue = roomCode ? roomCapacityIssue(Number(capacity), roomCode, rooms) : ""
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -901,17 +907,21 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId,
       cupo: messageOf(positiveIntSchema, Number(capacity)),
       fecha_inicio: messageOf(dateSchema, shownStart),
       fecha_fin: messageOf(dateSchema, shownEnd) ?? (shownStart && shownEnd < shownStart ? "La fecha de fin no puede ser anterior al inicio." : null),
+      hora_inicio: messageOf(timeSchema, hourStart),
+      hora_fin: messageOf(timeSchema, hourEnd) ?? (hourStart && hourEnd <= hourStart ? "La hora de fin debe ser posterior al inicio." : null),
+      aula: !roomCode ? "Selecciona un aula." : roomIssue || null,
     }
     setErrors(nextErrors)
     if (Object.values(nextErrors).some(Boolean)) return
     onSubmit({
       materia_plan_id: subjectId, periodo_id: periodId, paralelo: shownParallel.trim().toUpperCase(), cupo: Number(capacity),
       fecha_inicio: shownStart, fecha_fin: shownEnd, ...(teacherId ? { docente_id: teacherId } : {}),
+      horarios: [{ dia_semana: day, hora_inicio: hourStart, hora_fin: hourEnd, aula: roomCode }],
     })
   }
 
   return (
-    <Modal title={sourceCourse ? `Otro paralelo de ${sourceCourse.materia_codigo}` : "Nuevo paralelo"} description="Se crea con inscripción cerrada. Después podrás agregar su horario y abrirla. Los campos se sugieren automáticamente." onClose={onClose} locked={busy}>
+    <Modal title={sourceCourse ? `Otro paralelo de ${sourceCourse.materia_codigo}` : "Nuevo paralelo"} description="Define el primer horario y su aula aquí. El paralelo se crea con inscripción cerrada; podrás añadir más días después." onClose={onClose} locked={busy}>
       <form onSubmit={submit}>
         <DialogError error={error} />
         <Field id="course-subject" label="Materia del plan">
@@ -941,6 +951,32 @@ function CreateCourseDialog({ plans, periods, defaultPeriodId, initialSubjectId,
           </Field>
         </div>
         <p className="ui-field-hint" style={{ marginTop: -8 }}>{selectedPlan?.modalidad === "MODULAR" ? "Indica las fechas del módulo dentro del semestre académico." : "Se sugieren las fechas completas del semestre académico."}</p>
+        <div className="pl-form-row">
+          <Field id="course-day" label="Día de clase">
+            <select id="course-day" className="ui-select" value={day} onChange={(event) => setDay(event.target.value as Weekday)}>
+              {WEEKDAYS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </Field>
+          <Field id="course-room" label="Aula" hint="Debe tener asientos suficientes para el cupo." error={errors.aula}>
+            <select id="course-room" className="ui-select" value={roomCode} onChange={(event) => { setRoomCode(event.target.value); setErrors((current) => ({ ...current, aula: null })) }} required aria-invalid={Boolean(errors.aula)} aria-describedby={errors.aula ? "course-room-error course-room-hint" : "course-room-hint"}>
+              <option value="">Selecciona un aula</option>
+              {rooms.map((room) => {
+                const unavailable = room.capacidad === null || Number(capacity) > room.capacidad
+                return <option key={room.codigo} value={room.codigo} disabled={unavailable}>{room.codigo} · {room.capacidad === null ? "capacidad pendiente" : `${room.capacidad} asientos${unavailable ? " · cupo insuficiente" : ""}`}</option>
+              })}
+            </select>
+          </Field>
+        </div>
+        <div className="pl-form-row">
+          <Field id="course-hour-start" label="Hora de inicio" error={errors.hora_inicio}>
+            <input id="course-hour-start" className="ui-input" type="time" value={hourStart} onChange={(event) => { setHourStart(event.target.value); setErrors((current) => ({ ...current, hora_inicio: null })) }} required aria-invalid={Boolean(errors.hora_inicio)} />
+          </Field>
+          <Field id="course-hour-end" label="Hora de fin" error={errors.hora_fin}>
+            <input id="course-hour-end" className="ui-input" type="time" value={hourEnd} min={hourStart || undefined} onChange={(event) => { setHourEnd(event.target.value); setErrors((current) => ({ ...current, hora_fin: null })) }} required aria-invalid={Boolean(errors.hora_fin)} />
+          </Field>
+        </div>
+        {roomIssue && <p className="ui-alert ui-alert-warning" role="alert">{roomIssue}</p>}
+        {rooms.length === 0 && <p className="ui-alert ui-alert-warning" role="alert">Primero registra un aula activa en «Aulas y turnos».</p>}
         <Field id="course-teacher" label="Docente (opcional)" hint="Puedes asignarlo después con «Editar datos».">
           <select id="course-teacher" className="ui-select" value={teacherId} onChange={(event) => setTeacherId(event.target.value)} aria-describedby="course-teacher-hint">
             <option value="">Sin asignar</option>

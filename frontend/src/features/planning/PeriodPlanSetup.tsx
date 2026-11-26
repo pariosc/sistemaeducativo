@@ -5,6 +5,7 @@ import type { AcademicPeriod, Career, Course, Faculty, ModularTemplate, PeriodPl
 import { ButtonLabel, EmptyState, Notices } from "../shared/ui"
 import { Modal } from "../shared/Modal"
 import { formatDate } from "./dates"
+import { BulkCareerModal } from "./BulkCareerModal"
 
 type PlanRow = { career: Career; plan: StudyPlan | null; group: PlanOpening | null }
 
@@ -27,6 +28,7 @@ export function PeriodPlanSetup({ periodId }: { periodId: string }) {
   const [filterMonth, setFilterMonth] = useState("")
   const [sortBy, setSortBy] = useState("career")
   const [openingPlanId, setOpeningPlanId] = useState("")
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
@@ -99,7 +101,10 @@ export function PeriodPlanSetup({ periodId }: { periodId: string }) {
       <Notices notice={notice} error={error} />
 
       <div className="pl-career-setup">
-        <div className="pl-career-setup-head"><h3>Incorporar carrera y plan</h3><p>Selecciona en orden. Una carrera puede participar con su plan vigente.</p></div>
+        <div className="pl-career-setup-head">
+          <div><h3>Incorporar carrera y plan</h3><p>Selecciona una carrera o incorpora varias con sus planes vigentes.</p></div>
+          <button type="button" className="ui-btn ui-btn-primary" disabled={busy || !planning} onClick={() => { setError(""); setBulkOpen(true) }}>Incorporar varias carreras</button>
+        </div>
         <div className="pl-plan-setup-actions">
         <div className="ui-field">
           <label htmlFor="period-faculty">1. Facultad</label>
@@ -181,6 +186,20 @@ export function PeriodPlanSetup({ periodId }: { periodId: string }) {
           </div>
         </div>
       </details>
+      {bulkOpen && planning && <BulkCareerModal
+        careers={careers}
+        faculties={faculties}
+        plans={plans}
+        incorporatedIds={planning.carrera_ids}
+        busy={busy}
+        error={error}
+        onClose={() => setBulkOpen(false)}
+        onSubmit={async (items) => {
+          const ok = await act(() => api.addPeriodCareersBatch(periodId, items), `${items.length} carrera(s) incorporada(s) con sus planes.`)
+          if (ok) setBulkOpen(false)
+          return ok
+        }}
+      />}
       {openingPlanId && <Modal title="Iniciar grupo de ingreso" description="Revisa los datos antes de crear el grupo. El sistema generará un código y conservará su trayectoria de semestres." onClose={() => setOpeningPlanId("")} locked={busy}>
         <dl className="pl-opening-review">
           <div><dt>Plan</dt><dd>{plans.find((item) => item.id === openingPlanId)?.codigo}</dd></div>

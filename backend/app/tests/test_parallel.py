@@ -152,6 +152,53 @@ async def create_course_context(
     }
 
 
+async def test_create_course_with_room_and_schedule_is_atomic(client):
+    await admin_login(client)
+    context = await create_course_context(client, schedule=False)
+    room = await client.post(
+        "/api/v1/admin/planning/rooms",
+        json={"codigo": "LAB-101", "capacidad": 25},
+        headers=ORIGIN,
+    )
+    assert room.status_code == 201
+    base = {
+        "materia_plan_id": context["entry"]["id"],
+        "periodo_id": context["period"]["id"],
+        "cupo": 20,
+        "fecha_inicio": "2026-12-07",
+        "fecha_fin": "2026-12-31",
+        "horarios": [
+            {
+                "dia_semana": "LUNES",
+                "hora_inicio": "08:00",
+                "hora_fin": "10:00",
+                "aula": "LAB-101",
+            }
+        ],
+    }
+    too_many = await client.post(
+        "/api/v1/admin/courses",
+        json={**base, "paralelo": "B", "cupo": 30},
+        headers=ORIGIN,
+    )
+    assert too_many.status_code == 409
+    created = await client.post(
+        "/api/v1/admin/courses",
+        json={**base, "paralelo": "B"},
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["horarios"][0]["aula"] == "LAB-101"
+    conflict = await client.post(
+        "/api/v1/admin/courses",
+        json={**base, "paralelo": "C"},
+        headers=ORIGIN,
+    )
+    assert conflict.status_code == 409
+    courses = (await client.get("/api/v1/courses")).json()
+    assert {row["paralelo"] for row in courses} == {"A", "B"}
+
+
 async def test_bulk_registration_is_atomic_and_scoped_to_period(client):
     await admin_login(client)
     context = await create_course_context(client)
@@ -286,6 +333,38 @@ async def test_combined_offer_overview_and_dated_calendar(client, origin_headers
     assert [(item["fecha"], item["reprogramada"]) for item in rescheduled_week.json()] == [
         ("2026-12-08", True)
     ]
+
+    client.cookies.clear()
+    teacher = context["teacher"]
+    first_teacher_login = await client.post(
+        "/api/v1/auth/login",
+        json={"identificador": teacher["correo"], "contrasena": teacher["contrasena_temporal"]},
+        headers=ORIGIN,
+    )
+    assert first_teacher_login.status_code == 200
+    changed_password = await client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "contrasena_actual": teacher["contrasena_temporal"],
+            "contrasena_nueva": "DocenteAgenda2026!",
+        },
+        headers=ORIGIN,
+    )
+    assert changed_password.status_code == 200
+    client.cookies.clear()
+    teacher_login = await client.post(
+        "/api/v1/auth/login",
+        json={"identificador": teacher["correo"], "contrasena": "DocenteAgenda2026!"},
+        headers=ORIGIN,
+    )
+    assert teacher_login.status_code == 200
+    personal_week = await client.get(
+        "/api/v1/my/calendar", params={"week_start": "2026-12-07"}
+    )
+    assert personal_week.status_code == 200
+    assert personal_week.json() == rescheduled_week.json()
+    client.cookies.clear()
+    await admin_login(client)
 
     holiday = await client.post(
         f"/api/v1/admin/periods/{period_id}/holidays",
@@ -1359,6 +1438,10 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
     admin_courses = await client.get("/api/v1/courses")
     assert admin_courses.status_code == 200
     assert any(row["id"] == context["course"]["id"] for row in admin_courses.json())
+    admin_personal_week = await client.get(
+        "/api/v1/my/calendar", params={"week_start": "2026-12-07"}
+    )
+    assert admin_personal_week.status_code == 403
     admin_dashboard = await client.get("/api/v1/dashboard")
     assert admin_dashboard.status_code == 200
     assert admin_dashboard.json()["rol"] == "ADMINISTRADOR"
@@ -1420,6 +1503,11 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
     )
     assert student_login.status_code == 200
 
+    personal_url = "/api/v1/my/calendar"
+    week = {"week_start": "2026-12-07"}
+    before_enrollment = await client.get(personal_url, params=week)
+    assert before_enrollment.status_code == 200 and before_enrollment.json() == []
+
     offer = await client.get("/api/v1/student/offer")
     assert offer.status_code == 200
     assert any(row["curso"]["id"] == context["course"]["id"] for row in offer.json())
@@ -1429,6 +1517,11 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
         headers=ORIGIN,
     )
     assert enrollment.status_code == 201
+    student_week = await client.get(personal_url, params=week)
+    assert student_week.status_code == 200, student_week.text
+    assert [(row["curso_id"], row["aula"]) for row in student_week.json()] == [
+        (context["course"]["id"], "BASE")
+    ]
     duplicate = await client.post(
         "/api/v1/student/enrollments",
         json={"curso_id": context["course"]["id"]},
@@ -1479,6 +1572,8 @@ async def test_offer_enrollment_dashboard_and_schedule_notifications(client):
     )
     assert teacher_login.status_code == 200
     gradebook = await client.get("/api/v1/teacher/grades")
+    teacher_week = await client.get(personal_url, params=week)
+    assert teacher_week.status_code == 200 and teacher_week.json() == student_week.json()
     assert gradebook.status_code == 200
     work_item = next(
         row for row in gradebook.json() if row["inscripcion_id"] == enrollment.json()["id"]

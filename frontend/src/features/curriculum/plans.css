@@ -16,20 +16,21 @@
 .cx .plan-summary-chip[data-tone="gray"] { background: var(--cx-gray-soft); color: var(--cx-gray-ink); }
 .cx .plan-summary-chip[data-tone="blue"] { background: var(--cx-brand-soft); color: var(--cx-brand-dark); }
 .cx .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin: 0; padding: 0; list-style: none; }
-.cx .plan-grid > li { display: flex; }
-.cx .plan-card { display: grid; align-content: start; gap: 12px; width: 100%; padding: 22px; border: 1px solid var(--cx-line); border-top: 6px solid var(--state-accent); border-radius: var(--cx-radius); background: var(--cx-surface); box-shadow: var(--cx-shadow); transition: box-shadow .15s; }
+.cx .plan-grid > li { display: flex; min-width: 0; }
+.cx .plan-card { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; width: 100%; min-width: 0; padding: 22px; border: 1px solid var(--cx-line); border-top: 6px solid var(--state-accent); border-radius: var(--cx-radius); background: var(--cx-surface); box-shadow: var(--cx-shadow); transition: box-shadow .15s; }
 .cx .plan-card:hover { box-shadow: 0 8px 24px rgb(27 37 64 / 13%); }
 .cx .plan-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cx .plan-card-mod { color: var(--cx-muted); font-size: 13px; font-weight: 700; }
-.cx .plan-card h3 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
-.cx .plan-card-career { margin: -6px 0 0; color: var(--cx-muted); font-size: 14.5px; line-height: 1.45; }
+.cx .plan-card h3 { overflow-wrap: anywhere; font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.cx .plan-card-career { margin: -6px 0 0; overflow-wrap: anywhere; color: var(--cx-muted); font-size: 14.5px; line-height: 1.45; }
 .cx .plan-card-status { margin: -4px 0 0; font-size: 13.5px; font-weight: 700; }
 .cx .plan-card-status--error { color: var(--cx-red-ink); }
 .cx .plan-card-status--warning { color: var(--cx-amber-ink); }
 .cx .plan-card-status--ok { color: var(--cx-green-ink); }
 .cx .plan-card-status--muted { color: var(--cx-muted); }
-.cx .plan-card-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0; }
+.cx .plan-card-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; margin: 4px 0; }
 .cx .plan-card-stats div { padding: 9px 6px; border-radius: 10px; background: var(--cx-surface-muted); text-align: center; }
+.cx .plan-card > .ui-btn { min-width: 0; max-width: 100%; }
 .cx .plan-card-stats dt { color: var(--cx-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .cx .plan-card-stats dd { margin: 1px 0 0; font-size: 20px; font-weight: 800; }
 .cx .plan-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; }

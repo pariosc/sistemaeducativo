@@ -57,10 +57,14 @@ class CourseCreate(StrictInputModel):
     fecha_inicio: date
     fecha_fin: date
     docente_id: uuid.UUID | None = None
+    horarios: list[CourseScheduleInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def valid_date_range(self):
         ensure_date_order(self.fecha_inicio, self.fecha_fin)
+        keys = [(slot.dia_semana, slot.hora_inicio, slot.hora_fin) for slot in self.horarios]
+        if len(keys) != len(set(keys)):
+            raise ValueError("No se pueden repetir franjas horarias idénticas")
         return self
 
 

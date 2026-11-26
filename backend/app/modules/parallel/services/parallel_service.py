@@ -591,7 +591,17 @@ def create_course(db: Session, payload: CourseCreate) -> CoursePublic:
     )
     db.add(course)
     db.flush()
-    _commit_with_conflict_check(db, {course.id})
+    for schedule in payload.horarios:
+        db.add(
+            HorarioClase(
+                curso_id=course.id,
+                dia_semana=schedule.dia_semana,
+                hora_inicio=schedule.hora_inicio,
+                hora_fin=schedule.hora_fin,
+                aula=schedule.aula,
+            )
+        )
+    _commit_with_conflict_check(db, {course.id}, check_capacity=bool(payload.horarios))
     db.refresh(course)
     return _course_output(db, course)
 

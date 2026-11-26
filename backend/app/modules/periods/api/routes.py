@@ -8,6 +8,7 @@ from app.modules.access.models.user import UserRole, Usuario
 from app.modules.periods.schemas.period import PeriodCreate, PeriodPublic
 from app.modules.periods.schemas.planning import (
     PeriodCareerInput,
+    PeriodCareerPlanBatchInput,
     PeriodPlanInput,
     PeriodPlanningPublic,
     PeriodSubjectOverviewPublic,
@@ -55,6 +56,13 @@ async def post_period_career(
     period_id: UUID, payload: PeriodCareerInput, _: AdminUser, db: DbSession
 ):
     return planning_service.add_career(db, period_id, payload.carrera_id)
+
+
+@router.post("/{period_id}/careers/batch", response_model=PeriodPlanningPublic)
+async def post_period_careers_batch(
+    period_id: UUID, payload: PeriodCareerPlanBatchInput, _: AdminUser, db: DbSession
+):
+    return planning_service.add_careers_with_plans(db, period_id, payload.carreras)
 
 
 @router.delete("/{period_id}/careers/{career_id}", response_model=PeriodPlanningPublic)

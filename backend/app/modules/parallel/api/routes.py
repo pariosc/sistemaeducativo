@@ -42,6 +42,12 @@ from app.modules.parallel.services import parallel_service as service
 router = APIRouter(tags=["paralelos y calendario"])
 AdminUser = Annotated[Usuario, Depends(require_roles(UserRole.ADMINISTRADOR))]
 AuthenticatedUser = Annotated[Usuario, Depends(user_with_full_access)]
+AcademicUser = Annotated[Usuario, Depends(require_roles(UserRole.DOCENTE, UserRole.ESTUDIANTE))]
+
+
+@router.get("/api/v1/my/calendar", response_model=list[CalendarSessionPublic])
+async def get_personal_calendar(week_start: date, user: AcademicUser, db: DbSession):
+    return calendar_service.personal_week(db, user, week_start)
 
 
 @router.get(

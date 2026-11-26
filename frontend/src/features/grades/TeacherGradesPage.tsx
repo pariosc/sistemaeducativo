@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
 
-import { api, type GradeWorkItem } from "../../api/client"
+import { api, type Course, type GradeWorkItem } from "../../api/client"
 import { AdminNavigation } from "../shared/AdminNavigation"
+import { CourseWeeklySlots, WeeklySchedule } from "../shared/PersonalSchedule"
 import { gradeSchema, messageOf } from "../shared/validation"
 
 export function TeacherGradesPage() {
   const [items, setItems] = useState<GradeWorkItem[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState("")
   const [rowErrors, setRowErrors] = useState<Record<string, string | null>>({})
@@ -14,8 +16,9 @@ export function TeacherGradesPage() {
   const [saving, setSaving] = useState("")
 
   async function reload() {
-    const data = await api.teacherGradebook()
+    const [data, assignedCourses] = await Promise.all([api.teacherGradebook(), api.listCourses()])
     setItems(data)
+    setCourses(assignedCourses)
     setValues((current) => Object.fromEntries(data.map((item) => [item.inscripcion_id, current[item.inscripcion_id] ?? (item.nota_final === null ? "" : String(item.nota_final))])))
   }
   useEffect(() => { void reload().catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false)) }, [])
@@ -41,6 +44,8 @@ export function TeacherGradesPage() {
     <section className="content-wrap"><span className="eyebrow">DOCENCIA</span><h1>Calificaciones de mis paralelos</h1>
       <p className="section-intro">Registra y corrige notas finales para estudiantes inscritos en tus paralelos.</p>
       {error && <p role="alert" className="form-alert">{error}</p>}{message && <p role="status" className="success-note">{message}</p>}
+      <WeeklySchedule courses={courses} />
+      <section className="profile-card assignments-card"><h2>Mis paralelos y aulas</h2>{courses.length === 0 ? <p>No tienes paralelos asignados.</p> : <div className="table-scroll"><table><thead><tr><th>Materia / paralelo</th><th>Semestre académico</th><th>Fechas</th><th>Horario habitual y aula</th></tr></thead><tbody>{courses.map((course) => <tr key={course.id}><td>{course.materia_codigo} — {course.materia_nombre} · {course.paralelo}</td><td>{course.periodo_denominacion}</td><td>{course.fecha_inicio} a {course.fecha_fin}</td><td><CourseWeeklySlots course={course} /></td></tr>)}</tbody></table></div>}</section>
       {items.length === 0 ? <section className="profile-card"><p>No hay estudiantes inscritos en tus paralelos activos.</p></section> : <section className="profile-card users-table-card"><div className="table-scroll"><table>
         <thead><tr><th>Periodo</th><th>Materia / paralelo</th><th>Estudiante</th><th>Nota final</th><th>Registrada</th><th></th></tr></thead>
         <tbody>{items.map((item) => <tr key={item.inscripcion_id}>

@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictInputModel(BaseModel):
@@ -9,6 +9,15 @@ class StrictInputModel(BaseModel):
 
 class PeriodCareerInput(StrictInputModel):
     carrera_id: uuid.UUID
+
+
+class PeriodCareerPlanBatchItem(StrictInputModel):
+    carrera_id: uuid.UUID
+    plan_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class PeriodCareerPlanBatchInput(StrictInputModel):
+    carreras: list[PeriodCareerPlanBatchItem] = Field(min_length=1)
 
 
 class PeriodPlanInput(StrictInputModel):

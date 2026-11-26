@@ -1011,3 +1011,94 @@ notificaciones ocasionadas por feriados y excepciones de calendario.
   SVG, PNG y PDF. La secuencia modular detallada se explica en el capítulo 7.
 - Los archivos editables y exportados están en `docs/diagramas/`. Son cambios
   locales pendientes de incorporación al repositorio compartido mediante Git.
+
+## Incorporación múltiple de carreras y planes — 26-11-2026
+
+- En «Planificar semestre» se añadió un selector de varias carreras todavía no
+  incorporadas, con filtro por facultad, búsqueda, selección de filas visibles
+  y elección de uno o varios planes VIGENTES por carrera. Los grupos se inician
+  posteriormente. La incorporación individual sigue disponible.
+- La API administrativa valida carreras activas, planes VIGENTES de la carrera
+  y duplicados antes de guardar. Un único commit registra todo el lote; si hay
+  una selección inválida no se incorpora ninguna carrera ni plan. La repetición
+  del mismo lote no duplica relaciones existentes.
+- La prueba de integración del lote aprobó en SQLite, incluyendo rechazo
+  íntegro de un plan no vigente, incorporación de dos carreras con tres planes
+  y repetición idempotente. Ruff y compilación TypeScript/Vite aprobaron. Falta
+  revisión visual autenticada y prueba concurrente en PostgreSQL.
+
+## Escenario completo de prueba académica — 26-11-2026
+
+- Se cargó en PostgreSQL local un conjunto ficticio `QA-UPDS` para Ingeniería
+  de Sistemas, Administración de Empresas y Psicología. Incluye 3 facultades,
+  3 carreras, 3 planes VIGENTES de dos semestres, 12 materias, 2 periodos,
+  3 grupos de ingreso, 3 docentes, 9 estudiantes, 3 aulas y 6 paralelos.
+- Se registraron 18 habilitaciones, 15 inscripciones y 9 notas. Por carrera,
+  dos estudiantes aprobaron una materia inicial y avanzaron al periodo
+  siguiente; uno reprobó y la inscripción en la materia dependiente fue
+  rechazada por prerrequisito. La carga es idempotente y se limita a
+  PostgreSQL local de desarrollo.
+- Las materias se inspiran en páginas públicas de UPDS; la selección parcial
+  de dos semestres, los prerrequisitos y las personas son datos ficticios, no
+  la malla oficial. El escenario y las cuentas se describen en
+  `docs/DATOS_PRUEBA_UPDS.md`; las contraseñas no se guardan en el repositorio.
+- Verificaciones reales: segunda ejecución sin duplicados, 46 pruebas backend
+  y 6 frontend aprobadas, Ruff aprobado, compilación frontend aprobada y acceso local de
+  una cuenta ficticia con cambio obligatorio de contraseña. Se revisaron la
+  oferta académica, las vistas de notas y reportes de materias por plan en
+  PDF/XLSX y de notas por estudiante. Quedan la revisión
+  manual visual, la concurrencia y la comprobación visual de reportes.
+
+## Creación directa de paralelo semestral con aula — 26-11-2026
+
+- El modal «Nuevo paralelo» permite seleccionar día, horario y aula junto con
+  materia, fechas, cupo y docente. Las aulas sin capacidad suficiente aparecen
+  deshabilitadas. Se mantiene la inscripción cerrada hasta que el administrador
+  la abra explícitamente.
+- La API admite horarios iniciales opcionales al crear el paralelo. Aula,
+  capacidad y cruces se comprueban en la misma transacción: si falla alguna
+  validación, no queda un paralelo parcial. Los flujos que crean el paralelo
+  sin horario siguen siendo compatibles.
+- Una prueba de integración verificó la creación con aula, el rechazo por
+  capacidad, el rechazo por aula ocupada y la ausencia de registros parciales.
+  Aprobaron 47 pruebas backend, seis frontend, Ruff y build TypeScript/Vite.
+
+## Menú lateral plegable — 26-11-2026
+
+- Se añadió un botón de hamburguesa al marco de las pantallas autenticadas
+  para ocultar o desplegar la barra lateral en los tres roles. El contenido
+  ocupa el espacio liberado y la elección se conserva durante la sesión.
+- En pantallas estrechas el menú inicia cerrado si no hay una preferencia
+  guardada. El control comunica su estado con `aria-expanded` y mantiene la
+  navegación accesible por teclado.
+- Se verificó en navegador el cierre y la reapertura, incluido el ajuste de
+  ancho de la página. La compilación TypeScript/Vite aprobó.
+- Tras detectar que en «Planes de estudio» no aparecía la hamburguesa, se
+  movió el control al componente de navegación compartido por los marcos de
+  Inicio, Currículo, Planificación y las páginas de Docente/Estudiante. Se
+  verificó en «Planes de estudio» que el botón permanece visible al cerrar el
+  menú, que puede reabrirlo y que el estado se conserva al navegar a Carreras.
+
+## Ajuste de tarjetas de planes — 26-11-2026
+
+- Los cuatro indicadores de cada tarjeta de «Planes de estudio» se organizan
+  en dos columnas y se limitó el ancho del contenido y del botón al ancho de
+  la tarjeta. Los nombres y códigos largos pueden partirse sin desbordar.
+- La revisión visual local comprobó las ocho tarjetas: indicadores y botones
+  quedaron dentro de sus bordes con el menú lateral desplegado.
+
+## Agenda personal y aulas — 26-11-2026
+
+- Docentes y estudiantes ven una agenda semanal con la fecha, hora, materia,
+  paralelo y aula de cada clase efectiva. Pueden avanzar o retroceder semanas.
+  La vista usa los feriados, cancelaciones y reprogramaciones ya registrados.
+- La pantalla del docente muestra también los horarios habituales y aulas de
+  sus paralelos asignados. La oferta y las inscripciones del estudiante
+  destacan el horario habitual y el aula de cada paralelo.
+- La consulta nueva `/api/v1/my/calendar` se autoriza en servidor: un docente
+  ve solo sus paralelos y un estudiante solo los de inscripciones activas.
+  El administrador conserva su calendario administrativo separado.
+- La prueba integrada verificó la restricción por rol, la ausencia de clases
+  antes de inscribirse y una reprogramación visible para el docente. Aprobaron
+  47 pruebas backend, seis frontend, Ruff y la compilación TypeScript/Vite.
+  Falta la revisión visual autenticada con cuentas de docente y estudiante.

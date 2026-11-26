@@ -133,6 +133,22 @@ a { color: inherit; text-decoration: none; }
 .prerequisite-list li { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
 .text-action:disabled { color: #9aa3b2; cursor: not-allowed; }
 .profile-card h2 { margin: 0 0 15px; font-size: 18px; letter-spacing: -.02em; }
+.personal-schedule { margin-bottom: 20px; }
+.personal-schedule-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.personal-schedule-heading p { margin: -7px 0 16px; color: var(--muted); font-size: 13px; }
+.personal-schedule-controls { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; }
+.personal-schedule-controls button { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); color: var(--ink); }
+.personal-schedule-grid { display: grid; grid-template-columns: repeat(7, minmax(125px, 1fr)); gap: 8px; overflow-x: auto; }
+.personal-schedule-day { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.personal-schedule-day h3 { margin: 0 0 9px; text-transform: capitalize; font-size: 12px; }
+.personal-schedule-day h3 small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; }
+.personal-schedule-day > p { margin: 0; color: var(--muted); }
+.personal-schedule-session { display: grid; gap: 4px; margin-top: 6px; padding: 8px; border-left: 3px solid var(--blue); border-radius: 6px; background: var(--surface); font-size: 11px; overflow-wrap: anywhere; }
+.personal-schedule-session small { color: var(--blue); font-weight: 700; }
+.personal-schedule-slots { margin: 0; padding-left: 16px; line-height: 1.6; }
+.personal-schedule-offer { margin: 14px 0; font-size: 13px; }
+.personal-schedule-offer strong { display: block; margin-bottom: 5px; }
+@media (max-width: 700px) { .personal-schedule-heading { flex-direction: column; } }
 .avatar { display: grid; width: 56px; height: 56px; place-items: center; border-radius: 16px; background: var(--soft); color: var(--blue); font-size: 19px; font-weight: 800; }
 .profile-card .avatar + h2 { margin: 18px 0 8px; }
 .role-badge { display: inline-flex; padding: 6px 9px; border-radius: 100px; background: var(--soft); color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
@@ -187,4 +203,22 @@ td small { display: block; margin-top: 5px; color: var(--muted); line-height: 1.
   .dashboard-page:has(.admin-sidebar) .content-wrap { margin-left: 0; padding: 28px 18px; }
   .profile-card { padding: 19px; }
   .table-actions { min-width: 105px; }
+}
+
+/* Menú lateral plegable para todos los roles. */
+.dashboard-page:has(.admin-sidebar) .topbar { gap: 12px; padding: 18px 16px 16px; }
+.sidebar-toggle { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--ink); cursor: pointer; }
+.sidebar-toggle:hover { border-color: var(--blue); color: var(--blue); }
+.sidebar-toggle:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.dashboard-page:has(.admin-sidebar[data-collapsed="true"]) .topbar { width: 76px; overflow: hidden; }
+.dashboard-page:has(.admin-sidebar[data-collapsed="true"]) .topbar > .small-brand { display: none; }
+.admin-sidebar[data-collapsed="true"] { display: none; }
+.dashboard-page:has(.admin-sidebar[data-collapsed="true"]) .content-wrap { margin-left: 76px; }
+
+@media (max-width: 780px) {
+  .dashboard-page:has(.admin-sidebar) .topbar,
+  .dashboard-page:has(.admin-sidebar[data-collapsed="true"]) .topbar { position: static; width: 100%; height: auto; overflow: visible; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); box-shadow: none; }
+  .dashboard-page:has(.admin-sidebar) .content-wrap,
+  .dashboard-page:has(.admin-sidebar[data-collapsed="true"]) .content-wrap { margin-left: 0; padding: 28px 18px; }
+  .dashboard-page:has(.admin-sidebar) .admin-sidebar { width: 100%; }
 }

@@ -8,8 +8,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.access.models.user import Usuario
+from app.modules.access.models.user import UserRole, Usuario
 from app.modules.curriculum.models.entities import Carrera, Materia, MateriaPlan, PlanEstudio
+from app.modules.enrollments.models.entities import EstadoInscripcion, Inscripcion
 from app.modules.parallel.models.entities import (
     Curso,
     ExcepcionHorario,
@@ -23,14 +24,17 @@ from app.modules.parallel.services.room_capacity import replacement_room
 from app.modules.periods.models.entities import PeriodoAcademico
 
 
-def period_week(db: Session, period_id: UUID, week_start: date) -> list[CalendarSessionPublic]:
+def period_week(
+    db: Session, period_id: UUID, week_start: date, course_ids: set[UUID] | None = None
+) -> list[CalendarSessionPublic]:
     period = db.get(PeriodoAcademico, period_id)
     if not period:
         raise HTTPException(status_code=404, detail="Semestre académico no encontrado")
     week_end = week_start + timedelta(days=6)
-    courses = db.scalars(
-        select(Curso).where(Curso.periodo_id == period_id, Curso.activo.is_(True))
-    ).all()
+    query = select(Curso).where(Curso.periodo_id == period_id, Curso.activo.is_(True))
+    if course_ids is not None:
+        query = query.where(Curso.id.in_(course_ids))
+    courses = db.scalars(query).all()
     if not courses:
         return []
     course_ids = [course.id for course in courses]
@@ -85,6 +89,26 @@ def period_week(db: Session, period_id: UUID, week_start: date) -> list[Calendar
                 )
             )
     return sorted(result, key=lambda item: (item.fecha, item.hora_inicio, str(item.curso_id)))
+
+
+def personal_week(db: Session, user: Usuario, week_start: date) -> list[CalendarSessionPublic]:
+    """Effective classes assigned to the teacher or actively enrolled student."""
+    query = select(Curso.id, Curso.periodo_id).where(Curso.activo.is_(True))
+    if user.rol == UserRole.DOCENTE:
+        query = query.where(Curso.docente_id == user.id)
+    else:
+        query = query.join(Inscripcion, Inscripcion.curso_id == Curso.id).where(
+            Inscripcion.estudiante_id == user.id, Inscripcion.estado == EstadoInscripcion.ACTIVA
+        )
+    by_period: dict[UUID, set[UUID]] = defaultdict(set)
+    for course_id, period_id in db.execute(query):
+        by_period[period_id].add(course_id)
+    sessions = [
+        session
+        for period_id, course_ids in by_period.items()
+        for session in period_week(db, period_id, week_start, course_ids)
+    ]
+    return sorted(sessions, key=lambda item: (item.fecha, item.hora_inicio, str(item.curso_id)))
 
 
 def availability_day(db: Session, target: date) -> list[CalendarSessionPublic]:

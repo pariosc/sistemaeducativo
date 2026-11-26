@@ -641,3 +641,35 @@ uv run ruff check app migrations
   PostgreSQL local; `alembic check` sin cambios pendientes. Verificación:
   45 pruebas backend, Ruff y compilación TypeScript/Vite aprobados. Falta
   revisión visual autenticada del nuevo flujo.
+- **Escenario académico ficticio UPDS (26-11-2026):** se cargaron en PostgreSQL
+  local tres carreras con planes VIGENTES de dos semestres, doce materias,
+  tres docentes, nueve estudiantes, dos periodos y seis paralelos. Se
+  verificaron 18 habilitaciones, 15 inscripciones, nueve notas y el rechazo
+  de inscripciones sin prerrequisito. La carga idempotente está en
+  `backend/scripts/seed_upds_demo.py`; el recorrido y las fuentes de nombres
+  de materias están en `docs/DATOS_PRUEBA_UPDS.md`. Aprobaron 46 pruebas de
+  backend, seis de frontend, Ruff y build TypeScript/Vite. Falta la revisión
+  manual de pantallas, la concurrencia y la comprobación visual de reportes.
+- **Modal de paralelo semestral (26-11-2026):** ahora recoge un primer día,
+  horario y aula al crear el paralelo. La API guarda curso y horario en una
+  transacción y valida cupo, aula y cruces antes de confirmar. Una prueba de
+  integración cubre éxito y rechazos sin registros parciales. Pasaron 47
+  pruebas backend, seis frontend, Ruff y compilación TypeScript/Vite.
+- **Menú lateral plegable (26-11-2026):** la hamburguesa en el marco de todas
+  las pantallas autenticadas abre y cierra la navegación, conserva el estado
+  durante la sesión y libera ancho para el contenido. Tras encontrar que el
+  control faltaba en Currículo, se ubicó en la navegación compartida. La
+  prueba visual en Planes confirmó cierre, reapertura y persistencia al ir a
+  Carreras; TypeScript/Vite compiló.
+- **Tarjetas de planes (26-11-2026):** se corrigió el desborde de indicadores
+  y botones en la lista de planes mediante dos columnas de estadísticas y
+  límites de ancho. La revisión visual comprobó las ocho tarjetas en la
+  página «Planes de estudio».
+- **Agenda de docente y estudiante (26-11-2026):** sus pantallas muestran el
+  horario habitual y aula de cada paralelo, además de una agenda semanal de
+  clases efectivas. La agenda excluye feriados y cancelaciones e incluye
+  reprogramaciones con el aula correspondiente. La API limita los resultados
+  a paralelos asignados al docente o inscripciones activas del estudiante;
+  conserva el control de cambio obligatorio de contraseña. Aprobaron 47
+  pruebas backend, seis frontend, Ruff y build TypeScript/Vite. Falta revisión
+  visual con sesiones de ambos roles.

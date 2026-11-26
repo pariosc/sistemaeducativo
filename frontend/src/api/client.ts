@@ -164,6 +164,11 @@ export interface PeriodPlanning {
   plantilla_modular_id: string | null
 }
 
+export interface PeriodCareerPlanBatchItem {
+  carrera_id: string
+  plan_ids: string[]
+}
+
 export interface PlanOpening {
   id: string
   codigo: string
@@ -466,6 +471,7 @@ export const api = {
   getPlanningAvailabilityRange: (start: string, end: string) => request<PlanningBooking[]>(`/api/v1/admin/planning/availability-range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   setPeriodModularTemplate: (periodId: string, plantilla_modular_id: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/planning/modular-template`, { method: "PUT", body: JSON.stringify({ plantilla_modular_id }) }),
   addPeriodCareer: (periodId: string, carrera_id: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/careers`, { method: "POST", body: JSON.stringify({ carrera_id }) }),
+  addPeriodCareersBatch: (periodId: string, carreras: PeriodCareerPlanBatchItem[]) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/careers/batch`, { method: "POST", body: JSON.stringify({ carreras }) }),
   removePeriodCareer: (periodId: string, careerId: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/careers/${careerId}`, { method: "DELETE" }),
   addPeriodPlan: (periodId: string, plan_id: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/plans`, { method: "POST", body: JSON.stringify({ plan_id }) }),
   removePeriodPlan: (periodId: string, planId: string) => request<PeriodPlanning>(`/api/v1/admin/periods/${periodId}/plans/${planId}`, { method: "DELETE" }),
@@ -474,6 +480,7 @@ export const api = {
   listPeriodOpenings: (periodId: string, planId: string) => request<PlanOpening[]>(`/api/v1/admin/periods/${periodId}/plans/${planId}/openings`),
   listSubjectSuggestions: (periodId: string, planId: string) => request<SubjectSuggestion[]>(`/api/v1/admin/periods/${periodId}/plans/${planId}/suggestions`),
   listCourses: () => request<Course[]>("/api/v1/courses"),
+  myCalendar: (weekStart: string) => request<CalendarSession[]>(`/api/v1/my/calendar?week_start=${encodeURIComponent(weekStart)}`),
   listPlanningRooms: () => request<PlanningRoom[]>("/api/v1/admin/planning/rooms"),
   createPlanningRoom: (data: { codigo: string; capacidad: number }) => request<PlanningRoom>("/api/v1/admin/planning/rooms", { method: "POST", body: JSON.stringify(data) }),
   updatePlanningRoom: (codigo: string, data: { activa?: boolean; capacidad?: number }) => request<PlanningRoom>(`/api/v1/admin/planning/rooms/${encodeURIComponent(codigo)}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -487,7 +494,7 @@ export const api = {
   createModularPlan: (periodId: string, data: ModularPlanInput) => request<Course[]>(`/api/v1/admin/periods/${periodId}/modular/courses`, { method: "POST", body: JSON.stringify(data) }),
   previewModularBatch: (periodId: string, data: ModularBatchInput) => request<ModularBatchPreview>(`/api/v1/admin/periods/${periodId}/modular/batch/preview`, { method: "POST", body: JSON.stringify(data) }),
   createModularBatch: (periodId: string, data: ModularBatchInput) => request<Course[]>(`/api/v1/admin/periods/${periodId}/modular/batch/courses`, { method: "POST", body: JSON.stringify(data) }),
-  createCourse: (data: { materia_plan_id: string; periodo_id: string; paralelo: string; cupo: number; fecha_inicio: string; fecha_fin: string; docente_id?: string }) =>
+  createCourse: (data: { materia_plan_id: string; periodo_id: string; paralelo: string; cupo: number; fecha_inicio: string; fecha_fin: string; docente_id?: string; horarios?: Omit<CourseSchedule, "id">[] }) =>
     request<Course>("/api/v1/admin/courses", { method: "POST", body: JSON.stringify(data) }),
   updateCourse: (id: string, data: Partial<Pick<Course, "paralelo" | "cupo" | "fecha_inicio" | "fecha_fin" | "docente_id" | "activo">>) =>
     request<Course>(`/api/v1/admin/courses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

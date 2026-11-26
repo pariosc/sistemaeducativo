@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { api, type CourseOffer, type Enrollment } from "../../api/client"
 import { AdminNavigation } from "../shared/AdminNavigation"
+import { CourseWeeklySlots, WeeklySchedule } from "../shared/PersonalSchedule"
 
 export function StudentOfferPage() {
   const [offer, setOffer] = useState<CourseOffer[]>([])
@@ -31,6 +32,7 @@ export function StudentOfferPage() {
     <section className="content-wrap"><span className="eyebrow">MI FORMACIÓN</span><h1>Oferta e inscripciones</h1>
       <p className="section-intro">Consulta la oferta de tu plan y solicita inscripción en los paralelos disponibles.</p>
       {error && <p role="alert" className="form-alert">{error}</p>}{message && <p role="status" className="success-note">{message}</p>}
+      <WeeklySchedule courses={enrollments.filter((item) => item.estado === "ACTIVA").map((item) => item.curso)} />
       <div className="unit-list">{offer.length === 0 ? <section className="profile-card"><p>No hay oferta disponible para tu plan vigente.</p></section> : offer.map(({ curso, semestre_numero, semestre_nombre, cupos_disponibles, aula_habilitada, inscrito, prerrequisitos_pendientes }) => {
         const reasons: string[] = []
         if (!curso.activo) reasons.push("el paralelo está inactivo")
@@ -45,14 +47,14 @@ export function StudentOfferPage() {
           <p>Docente: {curso.docente_nombre ?? "Pendiente"} · Cupos disponibles: {cupos_disponibles}</p>
           <p>Inscripción {curso.inscripcion_abierta ? "abierta" : "cerrada"}</p>
           {prerrequisitos_pendientes.length > 0 && <p className="notice-box">Para inscribirte, primero debes aprobar: {prerrequisitos_pendientes.map((item) => `${item.codigo} — ${item.nombre}`).join(", ")} (nota mínima 51).</p>}
-          {curso.horarios.map((schedule) => <p key={schedule.id}>{schedule.dia_semana}: {schedule.hora_inicio.slice(0, 5)}–{schedule.hora_fin.slice(0, 5)}{schedule.aula ? ` · ${schedule.aula}` : ""}</p>)}
+          <div className="personal-schedule-offer"><strong>Horario habitual y aula</strong><CourseWeeklySlots course={curso} /></div>
           {inscrito ? <p className="success-note">Ya estás inscrito.</p> : <>
             {reasons.length > 0 && <p className="field-error" role="status">No puedes inscribirte: {reasons.join(", ")}.</p>}
             <button className="primary-button" disabled={reasons.length > 0 || enrolling === curso.id} title={reasons.length > 0 ? reasons.join(", ") : undefined} onClick={() => void enroll(curso.id, label)}>{enrolling === curso.id ? "Inscribiendo…" : "Solicitar inscripción"}</button>
           </>}
         </article>
       })}</div>
-      <section className="profile-card assignments-card"><h2>Mis inscripciones</h2>{enrollments.length === 0 ? <p>Aún no tienes inscripciones.</p> : <ul className="prerequisite-list">{enrollments.map((item) => <li key={item.id}>{item.curso.materia_codigo} — {item.curso.materia_nombre}, paralelo {item.curso.paralelo} ({item.curso.periodo_denominacion}) · {item.estado}</li>)}</ul>}</section>
+      <section className="profile-card assignments-card"><h2>Mis inscripciones</h2>{enrollments.length === 0 ? <p>Aún no tienes inscripciones.</p> : <div className="table-scroll"><table><thead><tr><th>Materia / paralelo</th><th>Semestre académico</th><th>Estado</th><th>Horario habitual y aula</th></tr></thead><tbody>{enrollments.map((item) => <tr key={item.id}><td>{item.curso.materia_codigo} — {item.curso.materia_nombre} · {item.curso.paralelo}</td><td>{item.curso.periodo_denominacion}</td><td>{item.estado}</td><td><CourseWeeklySlots course={item.curso} /></td></tr>)}</tbody></table></div>}</section>
     </section>
   </main>
 }

@@ -1,4 +1,7 @@
+import { useState } from "react"
+
 import { useAuth } from "../auth/AuthContext"
+import { Icon } from "./icons"
 import { ThemeToggle } from "./ThemeToggle"
 
 type Entry = { label: string; href: string }
@@ -27,6 +30,21 @@ function SidebarGroup({ title, entries }: { title: string; entries: Entry[] }) {
 
 export function AdminNavigation() {
   const { user, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(() => {
+    try {
+      const saved = window.sessionStorage.getItem("academico-sidebar-open")
+      if (saved !== null) return saved === "true"
+    } catch { /* La navegación sigue funcionando si el almacenamiento está bloqueado. */ }
+    return !window.matchMedia("(max-width: 780px)").matches
+  })
+
+  function toggleMenu() {
+    setMenuOpen((current) => {
+      const next = !current
+      try { window.sessionStorage.setItem("academico-sidebar-open", String(next)) } catch { /* Estado local suficiente. */ }
+      return next
+    })
+  }
   const role = user?.rol
   const groups: { title: string; entries: Entry[] }[] = role === "ADMINISTRADOR"
     ? [
@@ -62,21 +80,26 @@ export function AdminNavigation() {
         ]
 
   return (
-    <aside className="admin-sidebar">
-      <nav className="sidebar-menu" aria-label="Navegación principal">
-        <p className="sidebar-caption">MENÚ PRINCIPAL</p>
-        {groups.map((group) => <SidebarGroup key={group.title} {...group} />)}
-        <SidebarGroup title="Mi cuenta" entries={[{ label: "Perfil", href: "/perfil" }]} />
-      </nav>
-      <div className="sidebar-actions">
-        <ThemeToggle />
-        <button
-          className="sidebar-logout"
-          onClick={() => void logout().then(() => { window.location.href = "/login" })}
-        >
-          Cerrar sesión
-        </button>
-      </div>
-    </aside>
+    <>
+      <button type="button" className="sidebar-toggle" onClick={toggleMenu} aria-controls="admin-navigation" aria-expanded={menuOpen} aria-label={menuOpen ? "Ocultar menú lateral" : "Mostrar menú lateral"} title={menuOpen ? "Ocultar menú" : "Mostrar menú"}>
+        <Icon name="menu" size={22} />
+      </button>
+      <aside className="admin-sidebar" id="admin-navigation" data-collapsed={String(!menuOpen)}>
+        <nav className="sidebar-menu" aria-label="Navegación principal">
+          <p className="sidebar-caption">MENÚ PRINCIPAL</p>
+          {groups.map((group) => <SidebarGroup key={group.title} {...group} />)}
+          <SidebarGroup title="Mi cuenta" entries={[{ label: "Perfil", href: "/perfil" }]} />
+        </nav>
+        <div className="sidebar-actions">
+          <ThemeToggle />
+          <button
+            className="sidebar-logout"
+            onClick={() => void logout().then(() => { window.location.href = "/login" })}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+    </>
   )
 }

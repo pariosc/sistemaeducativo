@@ -28,6 +28,7 @@ from app.modules.periods.models.entities import (
     SemestreGrupo,
 )
 from app.modules.periods.schemas.planning import (
+    PeriodCareerPlanBatchItem,
     PeriodPlanningPublic,
     PeriodSubjectOverviewPublic,
     PlanOpeningPublic,
@@ -128,6 +129,79 @@ def add_career(db: Session, period_id: UUID, career_id: UUID) -> PeriodPlanningP
     if not db.get(PeriodoCarrera, (period_id, career_id)):
         db.add(PeriodoCarrera(periodo_id=period_id, carrera_id=career_id))
         db.commit()
+    return period_planning(db, period_id)
+
+
+def add_careers_with_plans(
+    db: Session, period_id: UUID, items: list[PeriodCareerPlanBatchItem]
+) -> PeriodPlanningPublic:
+    period = db.scalar(
+        select(PeriodoAcademico).where(PeriodoAcademico.id == period_id).with_for_update()
+    )
+    if not period:
+        raise HTTPException(status_code=404, detail="Semestre académico no encontrado")
+
+    career_ids = [item.carrera_id for item in items]
+    plan_ids = [plan_id for item in items for plan_id in item.plan_ids]
+    if len(set(career_ids)) != len(career_ids) or len(set(plan_ids)) != len(plan_ids):
+        raise HTTPException(
+            status_code=422, detail="La selección contiene carreras o planes repetidos"
+        )
+
+    careers = {
+        career.id: career
+        for career in db.scalars(select(Carrera).where(Carrera.id.in_(career_ids))).all()
+    }
+    plans = {
+        plan.id: plan
+        for plan in db.scalars(select(PlanEstudio).where(PlanEstudio.id.in_(plan_ids))).all()
+    }
+    for item in items:
+        career = careers.get(item.carrera_id)
+        if not career or not career.activo:
+            raise HTTPException(status_code=422, detail="Selecciona carreras activas")
+        for plan_id in item.plan_ids:
+            plan = plans.get(plan_id)
+            if not plan or plan.carrera_id != career.id:
+                raise HTTPException(
+                    status_code=422, detail="Cada plan debe pertenecer a su carrera"
+                )
+            if plan.estado != EstadoPlan.VIGENTE:
+                raise HTTPException(status_code=409, detail="Todos los planes deben estar VIGENTES")
+
+    present_careers = set(
+        db.scalars(
+            select(PeriodoCarrera.carrera_id).where(
+                PeriodoCarrera.periodo_id == period_id,
+                PeriodoCarrera.carrera_id.in_(career_ids),
+            )
+        ).all()
+    )
+    present_plans = set(
+        db.scalars(
+            select(PeriodoPlan.plan_id).where(
+                PeriodoPlan.periodo_id == period_id,
+                PeriodoPlan.plan_id.in_(plan_ids),
+            )
+        ).all()
+    )
+    db.add_all(
+        PeriodoCarrera(periodo_id=period_id, carrera_id=career_id)
+        for career_id in career_ids
+        if career_id not in present_careers
+    )
+    db.add_all(
+        PeriodoPlan(periodo_id=period_id, plan_id=plan_id)
+        for plan_id in plan_ids
+        if plan_id not in present_plans
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="La planificación cambió; vuelve a cargar las carreras"
+        ) from exc
     return period_planning(db, period_id)
 
 

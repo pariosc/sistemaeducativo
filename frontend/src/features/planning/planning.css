@@ -256,6 +256,19 @@
 .cx .pl-filter-empty { padding: 22px; border: 1px dashed var(--cx-line-strong); border-radius: var(--cx-radius); color: var(--cx-muted); }
 .cx .pl-career-setup { padding: 18px 20px; border: 1px solid var(--cx-line); border-radius: var(--cx-radius); background: var(--cx-surface); }
 .cx .pl-career-setup-head p { margin: 4px 0 0; color: var(--cx-muted); }
+.cx .pl-career-setup-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.cx .ui-modal:has(.pl-bulk-careers) { width: min(980px, calc(100vw - 32px)); }
+.cx .pl-bulk-careers { display: grid; gap: 12px; }
+.cx .pl-bulk-careers .pl-plan-table-filters { margin: 0; }
+.cx .pl-bulk-careers-scroll { max-height: min(52vh, 520px); overflow: auto; }
+.cx .pl-bulk-careers-table { min-width: 620px; }
+.cx .pl-bulk-careers-table th:first-child { width: 70px; }
+.cx .pl-bulk-careers-table td strong, .cx .pl-bulk-careers-table td small { display: block; }
+.cx .pl-bulk-careers-table td small { margin-top: 3px; color: var(--cx-muted); }
+.cx .pl-bulk-plan-options { display: grid; gap: 7px; }
+.cx .pl-bulk-plan-options label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.cx .pl-bulk-warning { margin: 0; color: var(--cx-amber-ink); }
+.cx .pl-bulk-error { margin: 0; color: var(--cx-red); }
 .cx .pl-career-setup .pl-plan-setup-actions { margin-bottom: 0; }
 .cx .pl-template-details { margin: 22px 0 0; border: 1px solid var(--cx-line); border-radius: var(--cx-radius); background: var(--cx-surface); }
 .cx .pl-template-details summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; padding: 15px 20px; cursor: pointer; font-weight: 750; }
